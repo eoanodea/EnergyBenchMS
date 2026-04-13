@@ -1,5 +1,5 @@
-target: http://localhost:8080
+target: http://192.168.0.100:30007
 users: 60
 spawn_rate: 5
 duration: 120
-port: 8080
+port: 30007
