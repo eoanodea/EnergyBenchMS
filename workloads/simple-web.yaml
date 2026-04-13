@@ -1,0 +1,5 @@
+target: http://localhost:8080
+users: 60
+spawn_rate: 5
+duration: 120
+port: 8080
