@@ -1,5 +1,11 @@
 Coming soon
 
+## How to run the script
+
+```
+python run_experiment.py --app apps/simple-web --workload workloads/simple-web.yaml --locustfile apps/simple-web/locustfile.py
+```
+
 ## Setting up an SSH tunnel
 
 To set up an SSH tunnel, you can use the following command:
