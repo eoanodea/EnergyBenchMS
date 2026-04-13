@@ -96,6 +96,13 @@ def wait_baseline(duration=20):
 def run_locust(workload, locust_file="locustfile.py"):
     """Run Locust with parameters from workload configuration."""
     logger.info("Starting Locust workload")
+    locust_path = Path(locust_file)
+
+    if not locust_path.exists():
+        raise FileNotFoundError(
+            f"Locust file not found: {locust_file}. "
+            "Pass --locustfile with a valid .py file path."
+        )
     
     # Extract parameters
     host = workload.get('target')
@@ -108,7 +115,7 @@ def run_locust(workload, locust_file="locustfile.py"):
     
     cmd = [
         "locust",
-        "-f", locust_file,
+        "-f", str(locust_path),
         "--host", host,
         "--users", str(users),
         "--spawn-rate", str(spawn_rate),
@@ -116,6 +123,7 @@ def run_locust(workload, locust_file="locustfile.py"):
         "--headless"
     ]
     
+    logger.info(f"Using locust file: {locust_path}")
     logger.info(f"Locust command: {' '.join(cmd)}")
     run_command(cmd)
     logger.info("Locust workload completed")
