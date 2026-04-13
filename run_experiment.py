@@ -59,6 +59,23 @@ def run_command(cmd, check=True):
     return result
 
 
+def resolve_locustfile(locust_file, app_path):
+    """Resolve locust file path with clear fallback rules."""
+    raw = Path(locust_file)
+    if raw.is_absolute():
+        return raw
+
+    cwd_candidate = Path.cwd() / raw
+    if cwd_candidate.exists():
+        return cwd_candidate
+
+    app_candidate = Path(app_path) / raw
+    if app_candidate.exists():
+        return app_candidate
+
+    return cwd_candidate
+
+
 def deploy_app(app_path):
     """Deploy application using kubectl apply."""
     logger.info(f"Deploying application from {app_path}")
@@ -93,14 +110,14 @@ def wait_baseline(duration=20):
     logger.info("Baseline period complete")
 
 
-def run_locust(workload, locust_file="locustfile.py"):
+def run_locust(workload, locust_file_path):
     """Run Locust with parameters from workload configuration."""
     logger.info("Starting Locust workload")
-    locust_path = Path(locust_file)
+    locust_path = Path(locust_file_path)
 
     if not locust_path.exists():
         raise FileNotFoundError(
-            f"Locust file not found: {locust_file}. "
+            f"Locust file not found: {locust_path}. "
             "Pass --locustfile with a valid .py file path."
         )
     
@@ -190,10 +207,16 @@ def main():
         logger.info("Starting energy analysis experiment")
         logger.info(f"App: {args.app}")
         logger.info(f"Workload: {args.workload}")
+        logger.info(f"Locust file argument: {args.locustfile}")
+        logger.info(f"Current working directory: {Path.cwd()}")
         logger.info("=" * 60)
         
         # Load workload configuration
         workload = load_workload(args.workload)
+
+        # Resolve locust file path from CLI input.
+        resolved_locustfile = resolve_locustfile(args.locustfile, args.app)
+        logger.info(f"Resolved locust file path: {resolved_locustfile}")
         
         # Get deployment name from app manifests
         deployment_name = get_deployment_name(args.app)
@@ -211,7 +234,7 @@ def main():
         timestamps['workload_start'] = datetime.now().isoformat()
         
         # Run Locust workload
-        run_locust(workload, args.locustfile)
+        run_locust(workload, resolved_locustfile)
         
         # Record workload end
         timestamps['workload_end'] = datetime.now().isoformat()
