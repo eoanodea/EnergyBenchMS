@@ -1,9 +1,23 @@
-Coming soon
+## How to use
 
-## How to run the script
+To install the required dependencies, you can use the following command:
+
+```pip install -r requirements.txt
+
+```
+
+To run an experiment, you can use the following command:
 
 ```
 python run_experiment.py --app apps/simple-web --workload workloads/simple-web.yaml --locustfile apps/simple-web/locustfile.py
+```
+
+To compile the results, you can use the following command:
+
+```
+python query_prometheus.py \
+  --run-dir runs/20260413_173526 \
+  --prom-url http://192.168.0.100:9090
 ```
 
 ## Setting up an SSH tunnel
