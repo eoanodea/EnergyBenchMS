@@ -9,15 +9,22 @@ To install the required dependencies, you can use the following command:
 To run an experiment, you can use the following command:
 
 ```
-python run_experiment.py --app apps/simple-web --workload workloads/simple-web.yaml --locustfile apps/simple-web/locustfile.py
+python scripts/run_experiment.py --app apps/simple-web --workload workloads/simple-web.yaml --locustfile apps/simple-web/locustfile.py
 ```
 
 To compile the results, you can use the following command:
 
 ```
-python query_prometheus.py \
+python scripts/query_prometheus.py \
   --run-dir runs/20260413_173526 \
   --prom-url http://192.168.0.100:9090
+```
+
+To summarize the results, you can use the following command:
+
+```
+python scripts/summarise_run.py --run-dir runs/20260413_173747
+
 ```
 
 ## Setting up an SSH tunnel

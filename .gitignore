@@ -1,2 +1,7 @@
 __pycache__/
-runs/*
+*.pyc
+runs/
+.venv/
+venv/
+*.log
+.DS_Store
