@@ -16,7 +16,7 @@ To compile the results, you can use the following command:
 
 ```
 python scripts/query_prometheus.py \
-  --run-dir runs/20260413_173526 \
+  --run-dir runs/20260413_173747 \
   --prom-url http://192.168.0.100:9090
 ```
 

@@ -15,9 +15,27 @@ ENERGY_QUERY = (
     ')'
 )
 
-CPU_QUERY = (
-    'sum by (container_name) ('
+CPU_TOTAL_QUERY = (
+    'sum('
     'rate(container_cpu_usage_seconds_total[1m])'
+    ')'
+)
+
+CPU_BY_CONTAINER_QUERY = (
+    'sum by (container_name) ('
+    'rate(container_cpu_usage_seconds_total{container_name!=""}[1m])'
+    ')'
+)
+
+CPU_BY_NAME_QUERY = (
+    'sum by (name) ('
+    'rate(container_cpu_usage_seconds_total{name!=""}[1m])'
+    ')'
+)
+
+CPU_K8S_BY_ID_QUERY = (
+    'sum by (id) ('
+    'rate(container_cpu_usage_seconds_total{id=~".*cri-containerd-.*scope"}[1m])'
     ')'
 )
 
@@ -77,6 +95,21 @@ def save_results(run_dir, filename, payload):
         json.dump(payload, output_file, indent=2)
 
 
+def has_series(payload):
+    """Return True when Prometheus payload includes at least one result series."""
+    results = payload.get("data", {}).get("result", [])
+    return bool(results)
+
+
+def normalize_name_label_to_container_name(payload):
+    """Normalize fallback series labels from name -> container_name."""
+    for result in payload.get("data", {}).get("result", []):
+        metric = result.get("metric", {})
+        if "container_name" not in metric and "name" in metric:
+            metric["container_name"] = metric["name"]
+    return payload
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Query Prometheus for metrics from a completed experiment run"
@@ -108,10 +141,41 @@ def main():
         step="5s",
     )
 
-    print("Querying CPU")
-    cpu_results = query_prometheus(
+    print("Querying CPU total")
+    cpu_total_results = query_prometheus(
         args.prom_url,
-        CPU_QUERY,
+        CPU_TOTAL_QUERY,
+        workload_start,
+        workload_end,
+        step="5s",
+    )
+
+    print("Querying CPU by container")
+    cpu_by_container_results = query_prometheus(
+        args.prom_url,
+        CPU_BY_CONTAINER_QUERY,
+        workload_start,
+        workload_end,
+        step="5s",
+    )
+
+    if not has_series(cpu_by_container_results):
+        print("No CPU series for container_name, trying name label fallback")
+        cpu_by_container_results = query_prometheus(
+            args.prom_url,
+            CPU_BY_NAME_QUERY,
+            workload_start,
+            workload_end,
+            step="5s",
+        )
+        cpu_by_container_results = normalize_name_label_to_container_name(
+            cpu_by_container_results
+        )
+
+    print("Querying CPU by Kubernetes container ID")
+    cpu_k8s_by_id_results = query_prometheus(
+        args.prom_url,
+        CPU_K8S_BY_ID_QUERY,
         workload_start,
         workload_end,
         step="5s",
@@ -119,7 +183,10 @@ def main():
 
     print("Saving results")
     save_results(run_dir, "energy.json", energy_results)
-    save_results(run_dir, "cpu.json", cpu_results)
+    save_results(run_dir, "cpu_total.json", cpu_total_results)
+    save_results(run_dir, "cpu_by_container.json", cpu_by_container_results)
+    save_results(run_dir, "cpu_k8s_by_id.json", cpu_k8s_by_id_results)
+    save_results(run_dir, "cpu.json", cpu_by_container_results)
 
 
 if __name__ == "__main__":
