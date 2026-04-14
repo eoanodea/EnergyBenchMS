@@ -148,7 +148,7 @@ def run_locust(workload, locust_file_path):
 
 def create_runs_directory():
     """Create timestamped runs directory and return its path."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     runs_dir = Path("runs") / timestamp
     runs_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Created runs directory: {runs_dir}")

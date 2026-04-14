@@ -5,3 +5,4 @@ runs/
 venv/
 *.log
 .DS_Store
+runs_comparison.html

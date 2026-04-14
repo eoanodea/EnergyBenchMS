@@ -27,6 +27,17 @@ python scripts/summarise_run.py --run-dir runs/20260413_173747
 
 ```
 
+To run the same experiment multiple times, query each run, summarise each run, and generate the comparison dashboard, you can use:
+
+```bash
+python scripts/run_pipeline.py \
+  --count 3 \
+  --app apps/simple-web \
+  --workload workloads/simple-web.yaml \
+  --locustfile apps/simple-web/locustfile.py \
+  --prom-url http://192.168.0.100:9090
+```
+
 ## Setting up an SSH tunnel
 
 To set up an SSH tunnel, you can use the following command:
