@@ -5,13 +5,13 @@ import argparse
 import re
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 
 RUN_DIR_PATTERN = re.compile(r"Results saved to:\s*(runs/\S+)")
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
+CLEANUP_SCRIPT = SCRIPT_DIR / "cleanup_sut.py"
 
 
 def run_step(command, description):
@@ -33,6 +33,19 @@ def run_step(command, description):
         )
 
     return completed
+
+
+def cleanup_sut(app, cooldown_seconds):
+    """Delete the SUT manifests, wait for pods to terminate, then pause."""
+    cleanup_cmd = [
+        sys.executable,
+        str(CLEANUP_SCRIPT),
+        "--app",
+        app,
+        "--sleep-seconds",
+        str(cooldown_seconds),
+    ]
+    run_step(cleanup_cmd, "Cleaning up SUT")
 
 
 def extract_run_dir(output_text):
@@ -120,10 +133,7 @@ def main():
         "--no-results",
     ]
     run_step(warmup_cmd, "Running warmup")
-
-    if args.cooldown_seconds:
-        print(f"Cooldown after warmup: sleeping {args.cooldown_seconds}s")
-        time.sleep(args.cooldown_seconds)
+    cleanup_sut(args.app, args.cooldown_seconds)
 
     for index in range(1, args.count + 1):
         print(f"=== Experiment {index}/{args.count} ===")
@@ -159,9 +169,8 @@ def main():
         ]
         run_step(summarise_cmd, "Summarising run")
 
-        if index < args.count and args.cooldown_seconds:
-            print(f"Cooldown between runs: sleeping {args.cooldown_seconds}s")
-            time.sleep(args.cooldown_seconds)
+        cleanup_sleep = args.cooldown_seconds if index < args.count else 0
+        cleanup_sut(args.app, cleanup_sleep)
 
     visualise_cmd = [
         sys.executable,

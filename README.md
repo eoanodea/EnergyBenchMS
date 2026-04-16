@@ -41,6 +41,16 @@ python scripts/run_pipeline.py \
 
 The pipeline performs one warmup run before the measured runs and waits for the configured cooldown after warmup and between each measured run.
 
+To clean up only the application stack, you can use:
+
+```bash
+python scripts/cleanup_sut.py \
+  --app apps/simple-web \
+  --sleep-seconds 30
+```
+
+The cleanup step deletes only the manifests in the application directory, waits for the matching SUT pods to terminate in the app's namespace, and does not touch observability components or other namespaces.
+
 ## Setting up an SSH tunnel
 
 To set up an SSH tunnel, you can use the following command:
