@@ -62,17 +62,28 @@ def make_workload_group(metadata):
 
 def collect_runs(runs_dir, specific_run=None):
     runs = []
-    if specific_run:
-        candidates = [Path(specific_run)]
-    else:
-        candidates = sorted([p for p in Path(runs_dir).iterdir() if p.is_dir()])
+    runs_root = Path(runs_dir)
 
-    for run_dir in candidates:
-        summary = load_json(run_dir / "summary.json")
+    if specific_run:
+        run_path = Path(specific_run)
+        if run_path.is_dir() and (run_path / "summary.json").exists():
+            candidates = [run_path / "summary.json"]
+        else:
+            candidates = sorted(run_path.rglob("summary.json"))
+    else:
+        candidates = sorted(runs_root.rglob("summary.json"))
+
+    for summary_path in candidates:
+        run_dir = summary_path.parent
+        summary = load_json(summary_path)
         if summary is None:
             continue
         metadata = load_json(run_dir / "metadata.json")
-        runs.append((run_dir.name, summary, metadata))
+        try:
+            run_name = str(run_dir.relative_to(runs_root))
+        except ValueError:
+            run_name = run_dir.name
+        runs.append((run_name, summary, metadata))
 
     return runs
 

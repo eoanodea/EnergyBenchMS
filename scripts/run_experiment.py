@@ -155,6 +155,17 @@ def create_runs_directory():
     return runs_dir
 
 
+def prepare_run_directory(run_dir=None):
+    """Create a run directory, using a caller-supplied path when provided."""
+    if run_dir:
+        run_path = Path(run_dir)
+        run_path.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Using provided run directory: {run_path}")
+        return run_path
+
+    return create_runs_directory()
+
+
 def save_metadata(runs_dir, app_path, workload_path, workload, timestamps):
     """Save experiment metadata to JSON file."""
     metadata = {
@@ -199,6 +210,10 @@ def main():
         "--no-results",
         action="store_true",
         help="Run the experiment without creating a results directory or metadata"
+    )
+    parser.add_argument(
+        "--run-dir",
+        help="Optional output directory for the run results"
     )
     
     args = parser.parse_args()
@@ -251,7 +266,7 @@ def main():
             logger.info("=" * 60)
         else:
             # Create runs directory and save metadata
-            runs_dir = create_runs_directory()
+            runs_dir = prepare_run_directory(args.run_dir)
             save_metadata(runs_dir, args.app, args.workload, workload, timestamps)
             
             logger.info("=" * 60)

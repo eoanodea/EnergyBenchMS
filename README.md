@@ -40,6 +40,7 @@ python scripts/run_pipeline.py \
 ```
 
 The pipeline performs one warmup run before the measured runs and waits for the configured cooldown after warmup and between each measured run.
+It also creates a batch directory under `runs/` named like `timestamp_sutname`, with measured runs stored as `iteration_timestamp` directories inside it.
 
 To clean up only the application stack, you can use:
 

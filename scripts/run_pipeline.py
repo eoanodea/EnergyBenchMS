@@ -2,10 +2,13 @@
 """Run a batch of experiments, collect metrics, and build a comparison dashboard."""
 
 import argparse
+from datetime import datetime
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+import yaml
 
 
 RUN_DIR_PATTERN = re.compile(r"Results saved to:\s*(runs/\S+)")
@@ -46,6 +49,32 @@ def cleanup_sut(app, cooldown_seconds):
         str(cooldown_seconds),
     ]
     run_step(cleanup_cmd, "Cleaning up SUT")
+
+
+def read_sut_name(app_path):
+    """Read the SUT name from the deployment manifest."""
+    deployment_path = Path(app_path) / "deployment.yaml"
+    with deployment_path.open("r", encoding="utf-8") as infile:
+        deployment = yaml.safe_load(infile)
+
+    name = deployment.get("metadata", {}).get("name")
+    return name or Path(app_path).name
+
+
+def create_batch_directory(runs_root, sut_name):
+    """Create the top-level batch directory for a pipeline execution."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    batch_dir = Path(runs_root) / f"{timestamp}_{sut_name}"
+    batch_dir.mkdir(parents=True, exist_ok=False)
+    return batch_dir
+
+
+def create_iteration_directory(batch_dir):
+    """Create an iteration directory inside the current batch."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    iteration_dir = Path(batch_dir) / f"iteration_{timestamp}"
+    iteration_dir.mkdir(parents=True, exist_ok=False)
+    return iteration_dir
 
 
 def extract_run_dir(output_text):
@@ -118,7 +147,10 @@ def main():
     if args.cooldown_seconds < 0:
         raise SystemExit("--cooldown-seconds must be at least 0")
 
+    sut_name = read_sut_name(args.app)
+    batch_dir = create_batch_directory(args.runs_dir, sut_name)
     created_runs = []
+    output_path = batch_dir / Path(args.output).name
 
     print("=== Warmup ===")
     warmup_cmd = [
@@ -137,6 +169,7 @@ def main():
 
     for index in range(1, args.count + 1):
         print(f"=== Experiment {index}/{args.count} ===")
+        iteration_dir = create_iteration_directory(batch_dir)
         run_experiment_cmd = [
             sys.executable,
             str(SCRIPT_DIR / "run_experiment.py"),
@@ -146,6 +179,8 @@ def main():
             args.workload,
             "--locustfile",
             args.locustfile,
+            "--run-dir",
+            str(iteration_dir),
         ]
         completed = run_step(run_experiment_cmd, "Running experiment")
         run_dir = extract_run_dir(completed.stderr or completed.stdout)
@@ -176,16 +211,17 @@ def main():
         sys.executable,
         str(SCRIPT_DIR / "visualise_runs.py"),
         "--runs-dir",
-        args.runs_dir,
+        str(batch_dir),
         "--output",
-        args.output,
+        str(output_path),
     ]
     run_step(visualise_cmd, "Generating comparison dashboard")
 
     print("Completed runs:")
     for run_dir in created_runs:
         print(f"- {run_dir}")
-    print(f"Dashboard written to {args.output}")
+    print(f"Batch directory: {batch_dir}")
+    print(f"Dashboard written to {output_path}")
 
 
 if __name__ == "__main__":
