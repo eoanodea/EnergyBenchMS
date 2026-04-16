@@ -5,6 +5,7 @@ import argparse
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -77,6 +78,12 @@ def build_parser():
         help="Base URL of Prometheus (for example, http://192.168.0.100:9090)",
     )
     parser.add_argument(
+        "--cooldown-seconds",
+        type=int,
+        default=0,
+        help="Cooldown time in seconds to wait after warmup and between runs (default: 0)",
+    )
+    parser.add_argument(
         "--runs-dir",
         default="runs",
         help="Directory containing run folders (default: runs)",
@@ -95,8 +102,28 @@ def main():
 
     if args.count < 1:
         raise SystemExit("--count must be at least 1")
+    if args.cooldown_seconds < 0:
+        raise SystemExit("--cooldown-seconds must be at least 0")
 
     created_runs = []
+
+    print("=== Warmup ===")
+    warmup_cmd = [
+        sys.executable,
+        str(SCRIPT_DIR / "run_experiment.py"),
+        "--app",
+        args.app,
+        "--workload",
+        args.workload,
+        "--locustfile",
+        args.locustfile,
+        "--no-results",
+    ]
+    run_step(warmup_cmd, "Running warmup")
+
+    if args.cooldown_seconds:
+        print(f"Cooldown after warmup: sleeping {args.cooldown_seconds}s")
+        time.sleep(args.cooldown_seconds)
 
     for index in range(1, args.count + 1):
         print(f"=== Experiment {index}/{args.count} ===")
@@ -131,6 +158,10 @@ def main():
             str(run_dir),
         ]
         run_step(summarise_cmd, "Summarising run")
+
+        if index < args.count and args.cooldown_seconds:
+            print(f"Cooldown between runs: sleeping {args.cooldown_seconds}s")
+            time.sleep(args.cooldown_seconds)
 
     visualise_cmd = [
         sys.executable,

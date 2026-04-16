@@ -195,6 +195,11 @@ def main():
         default="locustfile.py",
         help="Path to Locust file (default: locustfile.py)"
     )
+    parser.add_argument(
+        "--no-results",
+        action="store_true",
+        help="Run the experiment without creating a results directory or metadata"
+    )
     
     args = parser.parse_args()
     
@@ -238,15 +243,21 @@ def main():
         
         # Record workload end
         timestamps['workload_end'] = datetime.now().isoformat()
-        
-        # Create runs directory and save metadata
-        runs_dir = create_runs_directory()
-        save_metadata(runs_dir, args.app, args.workload, workload, timestamps)
-        
-        logger.info("=" * 60)
-        logger.info("Experiment completed successfully")
-        logger.info(f"Results saved to: {runs_dir}")
-        logger.info("=" * 60)
+
+        if args.no_results:
+            logger.info("=" * 60)
+            logger.info("Warmup completed successfully")
+            logger.info("No results directory created")
+            logger.info("=" * 60)
+        else:
+            # Create runs directory and save metadata
+            runs_dir = create_runs_directory()
+            save_metadata(runs_dir, args.app, args.workload, workload, timestamps)
+            
+            logger.info("=" * 60)
+            logger.info("Experiment completed successfully")
+            logger.info(f"Results saved to: {runs_dir}")
+            logger.info("=" * 60)
         
     except Exception as e:
         logger.error(f"Experiment failed: {e}", exc_info=True)

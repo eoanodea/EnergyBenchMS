@@ -35,8 +35,11 @@ python scripts/run_pipeline.py \
   --app apps/simple-web \
   --workload workloads/simple-web.yaml \
   --locustfile apps/simple-web/locustfile.py \
+  --cooldown-seconds 30 \
   --prom-url http://192.168.0.100:9090
 ```
+
+The pipeline performs one warmup run before the measured runs and waits for the configured cooldown after warmup and between each measured run.
 
 ## Setting up an SSH tunnel
 

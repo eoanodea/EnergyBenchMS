@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 runs/
+*-runs/
 .venv/
 venv/
 *.log
