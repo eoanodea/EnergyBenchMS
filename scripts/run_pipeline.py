@@ -120,6 +120,15 @@ def build_parser():
         help="Base URL of Prometheus (for example, http://192.168.0.100:9090)",
     )
     parser.add_argument(
+        "--energy-source",
+        choices=["auto", "joules", "bpf_cpu_time", "bpf_block_irq"],
+        default="auto",
+        help=(
+            "Energy metric source passed to query_prometheus.py "
+            "(default: auto)"
+        ),
+    )
+    parser.add_argument(
         "--cooldown-seconds",
         type=int,
         default=0,
@@ -193,6 +202,8 @@ def main():
             str(run_dir),
             "--prom-url",
             args.prom_url,
+            "--energy-source",
+            args.energy_source,
         ]
         run_step(query_cmd, "Querying Prometheus")
 

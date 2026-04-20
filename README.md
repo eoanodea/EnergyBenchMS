@@ -17,8 +17,12 @@ To compile the results, you can use the following command:
 ```
 python scripts/query_prometheus.py \
   --run-dir runs/20260413_173747 \
-  --prom-url http://192.168.0.100:9090
+  --prom-url http://192.168.0.100:9090 \
+  --energy-source auto
 ```
+
+Supported values for `--energy-source` are: `auto`, `joules`, `bpf_cpu_time`, and `bpf_block_irq`.
+The default `auto` mode prefers joules and falls back to BPF-based metrics when joules are unavailable or zero.
 
 To summarize the results, you can use the following command:
 
@@ -36,6 +40,7 @@ python scripts/run_pipeline.py \
   --workload workloads/simple-web.yaml \
   --locustfile apps/simple-web/locustfile.py \
   --cooldown-seconds 30 \
+  --energy-source auto \
   --prom-url http://192.168.0.100:9090
 ```
 

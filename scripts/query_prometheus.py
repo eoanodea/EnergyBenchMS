@@ -9,9 +9,21 @@ from pathlib import Path
 import requests
 
 
-ENERGY_QUERY = (
+ENERGY_QUERY_JOULES = (
     'sum by (container_name) ('
     'rate(kepler_container_cpu_joules_total{container_name!=""}[1m])'
+    ')'
+)
+
+ENERGY_QUERY_BPF_CPU_TIME = (
+    'sum by (container_name) ('
+    'rate(kepler_container_bpf_cpu_time_ms_total{container_name!=""}[1m])'
+    ')'
+)
+
+ENERGY_QUERY_BPF_BLOCK_IRQ = (
+    'sum by (container_name) ('
+    'rate(kepler_container_bpf_block_irq_total{container_name!=""}[1m])'
     ')'
 )
 
@@ -101,6 +113,47 @@ def has_series(payload):
     return bool(results)
 
 
+def has_nonzero_values(payload):
+    """Return True when at least one sample value is non-zero."""
+    results = payload.get("data", {}).get("result", [])
+    for result in results:
+        for point in result.get("values", []):
+            if not isinstance(point, list) or len(point) < 2:
+                continue
+            try:
+                if float(point[1]) != 0.0:
+                    return True
+            except (TypeError, ValueError):
+                continue
+    return False
+
+
+def query_energy_with_source(prom_url, start, end, source, step="5s"):
+    """Query energy-like series with source selection and auto fallback."""
+    query_by_source = {
+        "joules": ENERGY_QUERY_JOULES,
+        "bpf_cpu_time": ENERGY_QUERY_BPF_CPU_TIME,
+        "bpf_block_irq": ENERGY_QUERY_BPF_BLOCK_IRQ,
+    }
+
+    if source in query_by_source:
+        query = query_by_source[source]
+        payload = query_prometheus(prom_url, query, start, end, step=step)
+        return payload, source
+
+    # auto mode: prefer joules for real energy, then fallback to BPF-based proxies.
+    ordered_sources = ["joules", "bpf_cpu_time", "bpf_block_irq"]
+    last_payload = {"status": "success", "data": {"resultType": "matrix", "result": []}}
+    for candidate in ordered_sources:
+        query = query_by_source[candidate]
+        payload = query_prometheus(prom_url, query, start, end, step=step)
+        last_payload = payload
+        if has_series(payload) and has_nonzero_values(payload):
+            return payload, candidate
+
+    return last_payload, "auto_no_nonzero"
+
+
 def normalize_name_label_to_container_name(payload):
     """Normalize fallback series labels from name -> container_name."""
     for result in payload.get("data", {}).get("result", []):
@@ -124,6 +177,15 @@ def main():
         required=True,
         help="Base URL of Prometheus (for example, http://192.168.0.100:9090)",
     )
+    parser.add_argument(
+        "--energy-source",
+        choices=["auto", "joules", "bpf_cpu_time", "bpf_block_irq"],
+        default="auto",
+        help=(
+            "Energy metric source. 'auto' tries joules first, then BPF counters "
+            "as fallback (default: auto)."
+        ),
+    )
 
     args = parser.parse_args()
     run_dir = Path(args.run_dir)
@@ -132,14 +194,15 @@ def main():
     workload_start = to_unix_seconds(extract_timestamp(metadata, "workload_start"))
     workload_end = to_unix_seconds(extract_timestamp(metadata, "workload_end"))
 
-    print("Querying energy")
-    energy_results = query_prometheus(
+    print(f"Querying energy using source mode: {args.energy_source}")
+    energy_results, selected_energy_source = query_energy_with_source(
         args.prom_url,
-        ENERGY_QUERY,
         workload_start,
         workload_end,
+        args.energy_source,
         step="5s",
     )
+    print(f"Selected energy source: {selected_energy_source}")
 
     print("Querying CPU total")
     cpu_total_results = query_prometheus(
