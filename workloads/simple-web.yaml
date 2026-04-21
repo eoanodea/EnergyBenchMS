@@ -4,9 +4,9 @@ spawn_rate: 5
 duration: 120
 port: 30007
 saturation:
-	levels: [20, 40, 60, 80, 100]
-	dwell_seconds: 120
-	spawn_rate: 5
-	ramp_exclusion_seconds: 20
-	reset_between_levels: true
-	cooldown_seconds: 30
+  levels: [20, 40, 60, 80, 100]
+  dwell_seconds: 120
+  spawn_rate: 5
+  ramp_exclusion_seconds: 20
+  reset_between_levels: true
+  cooldown_seconds: 30

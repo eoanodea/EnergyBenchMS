@@ -2,6 +2,7 @@
 """Run a batch of experiments, collect metrics, and build a comparison dashboard."""
 
 import argparse
+import csv
 from datetime import datetime
 import json
 import re
@@ -191,6 +192,123 @@ def write_json(path, payload):
     """Write JSON payload to disk."""
     with Path(path).open("w", encoding="utf-8") as outfile:
         json.dump(payload, outfile, indent=2)
+
+
+def load_json(path):
+    """Load JSON payload from disk."""
+    with Path(path).open("r", encoding="utf-8") as infile:
+        return json.load(infile)
+
+
+def parse_effective_duration_seconds(metadata):
+    """Compute effective duration from metadata timestamps and ramp exclusion."""
+    timestamps = metadata.get("timestamps", {}) if isinstance(metadata, dict) else {}
+    start = timestamps.get("workload_effective_start") or timestamps.get("workload_start")
+    end = timestamps.get("workload_end")
+    if not start or not end:
+        return None
+
+    try:
+        start_dt = datetime.fromisoformat(start)
+        end_dt = datetime.fromisoformat(end)
+    except ValueError:
+        return None
+
+    duration = max(0.0, (end_dt - start_dt).total_seconds())
+    if "workload_effective_start" not in timestamps:
+        ramp_exclusion = metadata.get("ramp_exclusion_seconds", 0)
+        try:
+            duration = max(0.0, duration - float(ramp_exclusion))
+        except (TypeError, ValueError):
+            pass
+    return duration
+
+
+def sum_energy_mean(summary):
+    """Sum mean energy across reported containers for this run."""
+    total = 0.0
+    energy_by_container = summary.get("energy_by_container_name", {})
+    if not isinstance(energy_by_container, dict):
+        return 0.0
+
+    for stats in energy_by_container.values():
+        if not isinstance(stats, dict):
+            continue
+        value = stats.get("mean")
+        if isinstance(value, (int, float)):
+            total += float(value)
+
+    return total
+
+
+def compute_calibration_row(user_level, run_dir):
+    """Build one calibration CSV row from run outputs."""
+    summary = load_json(Path(run_dir) / "summary.json")
+    metadata = load_json(Path(run_dir) / "metadata.json")
+
+    workload = summary.get("workload", {}) if isinstance(summary, dict) else {}
+    cpu_total = summary.get("cpu_total", {}) if isinstance(summary, dict) else {}
+
+    throughput_mean_rps = workload.get("throughput_mean_rps")
+    p95_latency = workload.get("p95_latency")
+    error_rate = workload.get("error_rate")
+    cpu_mean = cpu_total.get("mean") if isinstance(cpu_total, dict) else None
+    cpu_max = cpu_total.get("max") if isinstance(cpu_total, dict) else None
+
+    effective_duration = parse_effective_duration_seconds(metadata)
+    energy_mean = sum_energy_mean(summary)
+    energy_total = ""
+    energy_per_request = ""
+
+    if isinstance(effective_duration, (int, float)):
+        energy_total = energy_mean * effective_duration
+
+    successful_requests = ""
+    if isinstance(throughput_mean_rps, (int, float)) and isinstance(effective_duration, (int, float)):
+        successful_requests = throughput_mean_rps * effective_duration
+
+    if isinstance(energy_total, (int, float)) and isinstance(successful_requests, (int, float)):
+        if successful_requests > 0:
+            energy_per_request = energy_total / successful_requests
+
+    return {
+        "user_level": user_level,
+        "throughput_mean": throughput_mean_rps if throughput_mean_rps is not None else "",
+        "cpu_mean": cpu_mean if cpu_mean is not None else "",
+        "cpu_max": cpu_max if cpu_max is not None else "",
+        "energy_total": energy_total,
+        "energy_per_request": energy_per_request,
+        "p95_latency": p95_latency if p95_latency is not None else "",
+        "error_rate": error_rate if error_rate is not None else "",
+    }
+
+
+def write_calibration_summary(batch_dir, saturation_plan):
+    """Generate calibration_summary.csv from saturation run outputs."""
+    rows = []
+    for run_info in saturation_plan.get("runs", []):
+        user_level = run_info.get("user_level")
+        run_dir = run_info.get("run_dir")
+        if user_level is None or not run_dir:
+            continue
+        rows.append(compute_calibration_row(user_level, run_dir))
+
+    output_path = Path(batch_dir) / "calibration_summary.csv"
+    fieldnames = [
+        "user_level",
+        "throughput_mean",
+        "cpu_mean",
+        "cpu_max",
+        "energy_total",
+        "energy_per_request",
+        "p95_latency",
+        "error_rate",
+    ]
+    with output_path.open("w", encoding="utf-8", newline="") as outfile:
+        writer = csv.DictWriter(outfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in sorted(rows, key=lambda item: int(item["user_level"])):
+            writer.writerow(row)
 
 
 def build_parser():
@@ -419,6 +537,8 @@ def main():
 
         if not saturation["reset_between_levels"]:
             cleanup_sut(args.app, 0)
+
+        write_calibration_summary(batch_dir, saturation_plan)
     else:
         cleanup_sut(args.app, args.cooldown_seconds)
 
