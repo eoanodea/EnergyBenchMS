@@ -17,6 +17,7 @@ RUN_DIR_PATTERN = re.compile(r"Results saved to:\s*(runs/\S+)")
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 CLEANUP_SCRIPT = SCRIPT_DIR / "cleanup_sut.py"
+SATURATION_ANALYSE_SCRIPT = SCRIPT_DIR / "saturation_analyse.py"
 
 
 def run_step(command, description):
@@ -400,6 +401,30 @@ def build_parser():
         type=int,
         help="Cooldown between saturation levels",
     )
+    parser.add_argument(
+        "--sat-plateau-threshold",
+        type=float,
+        default=0.05,
+        help="Throughput plateau threshold as fraction (default: 0.05)",
+    )
+    parser.add_argument(
+        "--sat-latency-jump-threshold",
+        type=float,
+        default=0.30,
+        help="Latency jump threshold as fraction (default: 0.30)",
+    )
+    parser.add_argument(
+        "--sat-error-rate-threshold",
+        type=float,
+        default=0.01,
+        help="Error rate threshold as fraction (default: 0.01)",
+    )
+    parser.add_argument(
+        "--sat-cpu-threshold",
+        type=float,
+        default=0.90,
+        help="CPU mean threshold as fraction (default: 0.90)",
+    )
     reset_group = parser.add_mutually_exclusive_group()
     reset_group.add_argument(
         "--sat-reset-between-levels",
@@ -539,6 +564,25 @@ def main():
             cleanup_sut(args.app, 0)
 
         write_calibration_summary(batch_dir, saturation_plan)
+
+        saturation_summary_path = Path(batch_dir) / "saturation_summary.json"
+        analyse_cmd = [
+            sys.executable,
+            str(SATURATION_ANALYSE_SCRIPT),
+            "--calibration-csv",
+            str(Path(batch_dir) / "calibration_summary.csv"),
+            "--output",
+            str(saturation_summary_path),
+            "--plateau-threshold",
+            str(args.sat_plateau_threshold),
+            "--latency-jump-threshold",
+            str(args.sat_latency_jump_threshold),
+            "--error-rate-threshold",
+            str(args.sat_error_rate_threshold),
+            "--cpu-threshold",
+            str(args.sat_cpu_threshold),
+        ]
+        run_step(analyse_cmd, "Analysing saturation")
     else:
         cleanup_sut(args.app, args.cooldown_seconds)
 
