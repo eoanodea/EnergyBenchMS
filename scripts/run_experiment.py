@@ -8,12 +8,11 @@ Deploys an application to Kubernetes, waits for readiness, then runs a Locust wo
 import argparse
 import json
 import logging
-import os
 import subprocess
 import sys
 import time
 import yaml
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -110,7 +109,7 @@ def wait_baseline(duration=20):
     logger.info("Baseline period complete")
 
 
-def run_locust(workload, locust_file_path):
+def run_locust(workload, locust_file_path, csv_prefix=None):
     """Run Locust with parameters from workload configuration."""
     logger.info("Starting Locust workload")
     locust_path = Path(locust_file_path)
@@ -139,11 +138,63 @@ def run_locust(workload, locust_file_path):
         "--run-time", f"{duration}s",
         "--headless"
     ]
+
+    if csv_prefix:
+        cmd.extend([
+            "--csv", str(csv_prefix),
+            "--csv-full-history",
+        ])
     
     logger.info(f"Using locust file: {locust_path}")
     logger.info(f"Locust command: {' '.join(cmd)}")
     run_command(cmd)
     logger.info("Locust workload completed")
+
+
+def apply_workload_overrides(workload, users=None, spawn_rate=None, duration=None):
+    """Apply optional CLI overrides to workload fields."""
+    merged = dict(workload)
+    if users is not None:
+        merged["users"] = users
+    if spawn_rate is not None:
+        merged["spawn_rate"] = spawn_rate
+    if duration is not None:
+        merged["duration"] = duration
+    return merged
+
+
+def validate_workload(workload):
+    """Validate required workload fields and ranges."""
+    required = ["target", "users", "spawn_rate", "duration"]
+    missing = [field for field in required if workload.get(field) in (None, "")]
+    if missing:
+        raise ValueError(f"Missing required workload parameters: {', '.join(missing)}")
+
+    for numeric_field in ["users", "spawn_rate", "duration"]:
+        try:
+            value = float(workload[numeric_field])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid {numeric_field}: {workload[numeric_field]!r}") from exc
+        if value <= 0:
+            raise ValueError(f"{numeric_field} must be greater than 0")
+
+
+def normalize_ramp_exclusion_seconds(cli_value, workload):
+    """Resolve ramp exclusion seconds from CLI or workload with defaults."""
+    if cli_value is not None:
+        value = cli_value
+    else:
+        value = workload.get("ramp_exclusion_seconds", 0)
+
+    try:
+        ramp_exclusion = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid ramp exclusion seconds: {value!r}") from exc
+
+    if ramp_exclusion < 0:
+        raise ValueError("ramp exclusion seconds must be at least 0")
+
+    return ramp_exclusion
 
 
 def create_runs_directory():
@@ -166,15 +217,26 @@ def prepare_run_directory(run_dir=None):
     return create_runs_directory()
 
 
-def save_metadata(runs_dir, app_path, workload_path, workload, timestamps):
+def save_metadata(
+    runs_dir,
+    app_path,
+    workload_path,
+    workload,
+    timestamps,
+    ramp_exclusion_seconds,
+    locust_artifacts,
+):
     """Save experiment metadata to JSON file."""
     metadata = {
         "app_path": str(Path(app_path).absolute()),
         "workload_path": str(Path(workload_path).absolute()),
         "workload_parameters": workload,
+        "ramp_exclusion_seconds": ramp_exclusion_seconds,
+        "locust_artifacts": locust_artifacts,
         "timestamps": {
             "experiment_start": timestamps['experiment_start'],
             "workload_start": timestamps['workload_start'],
+            "workload_effective_start": timestamps['workload_effective_start'],
             "workload_end": timestamps['workload_end']
         }
     }
@@ -215,6 +277,26 @@ def main():
         "--run-dir",
         help="Optional output directory for the run results"
     )
+    parser.add_argument(
+        "--users",
+        type=int,
+        help="Override users from workload YAML"
+    )
+    parser.add_argument(
+        "--spawn-rate",
+        type=float,
+        help="Override spawn_rate from workload YAML"
+    )
+    parser.add_argument(
+        "--duration",
+        type=int,
+        help="Override duration (seconds) from workload YAML"
+    )
+    parser.add_argument(
+        "--ramp-exclusion-seconds",
+        type=int,
+        help="Seconds at workload start to exclude from downstream summaries"
+    )
     
     args = parser.parse_args()
     
@@ -233,6 +315,17 @@ def main():
         
         # Load workload configuration
         workload = load_workload(args.workload)
+        workload = apply_workload_overrides(
+            workload,
+            users=args.users,
+            spawn_rate=args.spawn_rate,
+            duration=args.duration,
+        )
+        validate_workload(workload)
+        ramp_exclusion_seconds = normalize_ramp_exclusion_seconds(
+            args.ramp_exclusion_seconds,
+            workload,
+        )
 
         # Resolve locust file path from CLI input.
         resolved_locustfile = resolve_locustfile(args.locustfile, args.app)
@@ -250,11 +343,27 @@ def main():
         # Wait baseline period
         wait_baseline(20)
         
+        runs_dir = None
+        locust_csv_prefix = None
+        locust_artifacts = {}
+        if not args.no_results:
+            runs_dir = prepare_run_directory(args.run_dir)
+            locust_csv_prefix = runs_dir / "locust"
+            locust_artifacts = {
+                "stats_csv": str(runs_dir / "locust_stats.csv"),
+                "stats_history_csv": str(runs_dir / "locust_stats_history.csv"),
+                "failures_csv": str(runs_dir / "locust_failures.csv"),
+                "exceptions_csv": str(runs_dir / "locust_exceptions.csv"),
+            }
+
         # Record workload start
-        timestamps['workload_start'] = datetime.now().isoformat()
+        workload_start_dt = datetime.now()
+        timestamps['workload_start'] = workload_start_dt.isoformat()
+        effective_start_dt = workload_start_dt + timedelta(seconds=ramp_exclusion_seconds)
+        timestamps['workload_effective_start'] = effective_start_dt.isoformat()
         
         # Run Locust workload
-        run_locust(workload, resolved_locustfile)
+        run_locust(workload, resolved_locustfile, csv_prefix=locust_csv_prefix)
         
         # Record workload end
         timestamps['workload_end'] = datetime.now().isoformat()
@@ -265,9 +374,15 @@ def main():
             logger.info("No results directory created")
             logger.info("=" * 60)
         else:
-            # Create runs directory and save metadata
-            runs_dir = prepare_run_directory(args.run_dir)
-            save_metadata(runs_dir, args.app, args.workload, workload, timestamps)
+            save_metadata(
+                runs_dir,
+                args.app,
+                args.workload,
+                workload,
+                timestamps,
+                ramp_exclusion_seconds,
+                locust_artifacts,
+            )
             
             logger.info("=" * 60)
             logger.info("Experiment completed successfully")

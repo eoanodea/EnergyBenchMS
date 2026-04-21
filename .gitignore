@@ -2,8 +2,10 @@ __pycache__/
 *.pyc
 runs/
 *-runs/
+*-runs-*/
 .venv/
 venv/
 *.log
 .DS_Store
 runs_comparison.html
+.github/

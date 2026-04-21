@@ -3,6 +3,7 @@
 
 import argparse
 from datetime import datetime
+import json
 import re
 import subprocess
 import sys
@@ -77,12 +78,119 @@ def create_iteration_directory(batch_dir):
     return iteration_dir
 
 
+def create_saturation_iteration_directory(batch_dir, level):
+    """Create a saturation iteration directory that includes the user level."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    iteration_dir = Path(batch_dir) / f"level_{int(level):03d}_iteration_{timestamp}"
+    iteration_dir.mkdir(parents=True, exist_ok=False)
+    return iteration_dir
+
+
 def extract_run_dir(output_text):
     """Extract the run directory path from run_experiment output."""
     match = RUN_DIR_PATTERN.search(output_text)
     if not match:
         raise ValueError("Could not determine the created run directory from output")
     return Path(match.group(1))
+
+
+def parse_levels(levels_text):
+    """Parse comma-separated user levels from CLI input."""
+    values = []
+    for raw_part in str(levels_text).split(","):
+        part = raw_part.strip()
+        if not part:
+            continue
+        values.append(int(part))
+    if not values:
+        raise ValueError("At least one saturation level is required")
+    if any(level <= 0 for level in values):
+        raise ValueError("Saturation levels must be positive integers")
+    return values
+
+
+def load_workload_yaml(workload_path):
+    """Load workload YAML from disk."""
+    with Path(workload_path).open("r", encoding="utf-8") as infile:
+        loaded = yaml.safe_load(infile)
+    if not isinstance(loaded, dict):
+        raise ValueError("Workload YAML must contain a top-level mapping")
+    return loaded
+
+
+def resolve_saturation_settings(args):
+    """Resolve saturation settings from workload YAML and CLI overrides."""
+    workload = load_workload_yaml(args.workload)
+    saturation = workload.get("saturation", {})
+    if not isinstance(saturation, dict):
+        raise ValueError("'saturation' must be a mapping when provided")
+
+    levels = args.sat_levels
+    if levels is None:
+        levels = saturation.get("levels")
+    if not levels:
+        levels = [20, 40, 60, 80, 100]
+
+    if isinstance(levels, str):
+        levels = parse_levels(levels)
+    else:
+        levels = [int(level) for level in levels]
+
+    dwell_seconds = args.sat_dwell_seconds
+    if dwell_seconds is None:
+        dwell_seconds = saturation.get("dwell_seconds")
+    if dwell_seconds is None:
+        raise ValueError("Saturation mode requires dwell_seconds")
+    dwell_seconds = int(dwell_seconds)
+
+    spawn_rate = args.sat_spawn_rate
+    if spawn_rate is None:
+        spawn_rate = saturation.get("spawn_rate")
+    if spawn_rate is None:
+        spawn_rate = workload.get("spawn_rate")
+    if spawn_rate is None:
+        raise ValueError("Saturation mode requires spawn_rate")
+    spawn_rate = float(spawn_rate)
+
+    ramp_exclusion_seconds = args.sat_ramp_exclusion_seconds
+    if ramp_exclusion_seconds is None:
+        ramp_exclusion_seconds = saturation.get("ramp_exclusion_seconds", 20)
+    ramp_exclusion_seconds = int(ramp_exclusion_seconds)
+
+    cooldown_seconds = args.sat_cooldown_seconds
+    if cooldown_seconds is None:
+        cooldown_seconds = saturation.get("cooldown_seconds", args.cooldown_seconds)
+    cooldown_seconds = int(cooldown_seconds)
+
+    reset_between_levels = args.sat_reset_between_levels
+    if reset_between_levels is None:
+        reset_between_levels = saturation.get("reset_between_levels", True)
+
+    if dwell_seconds <= 0:
+        raise ValueError("dwell_seconds must be greater than 0")
+    if spawn_rate <= 0:
+        raise ValueError("spawn_rate must be greater than 0")
+    if ramp_exclusion_seconds < 0:
+        raise ValueError("ramp_exclusion_seconds must be at least 0")
+    if cooldown_seconds < 0:
+        raise ValueError("cooldown_seconds must be at least 0")
+    if ramp_exclusion_seconds >= dwell_seconds:
+        raise ValueError("ramp_exclusion_seconds must be less than dwell_seconds")
+
+    return {
+        "levels": levels,
+        "dwell_seconds": dwell_seconds,
+        "spawn_rate": spawn_rate,
+        "ramp_exclusion_seconds": ramp_exclusion_seconds,
+        "cooldown_seconds": cooldown_seconds,
+        "reset_between_levels": bool(reset_between_levels),
+    }
+
+
+def write_json(path, payload):
+    """Write JSON payload to disk."""
+    with Path(path).open("w", encoding="utf-8") as outfile:
+        json.dump(payload, outfile, indent=2)
 
 
 def build_parser():
@@ -144,6 +252,50 @@ def build_parser():
         default="runs_comparison.html",
         help="Output HTML path (default: runs_comparison.html)",
     )
+    parser.add_argument(
+        "--saturation-enabled",
+        action="store_true",
+        help="Enable stepwise saturation mode",
+    )
+    parser.add_argument(
+        "--sat-levels",
+        type=parse_levels,
+        help="Comma-separated user levels for saturation mode (for example: 20,40,60)",
+    )
+    parser.add_argument(
+        "--sat-dwell-seconds",
+        type=int,
+        help="Fixed dwell duration per saturation level (seconds)",
+    )
+    parser.add_argument(
+        "--sat-spawn-rate",
+        type=float,
+        help="Spawn rate used in saturation mode",
+    )
+    parser.add_argument(
+        "--sat-ramp-exclusion-seconds",
+        type=int,
+        help="Ramp exclusion seconds used for effective measurement windows",
+    )
+    parser.add_argument(
+        "--sat-cooldown-seconds",
+        type=int,
+        help="Cooldown between saturation levels",
+    )
+    reset_group = parser.add_mutually_exclusive_group()
+    reset_group.add_argument(
+        "--sat-reset-between-levels",
+        dest="sat_reset_between_levels",
+        action="store_true",
+        help="Cleanup and cooldown between each saturation level",
+    )
+    reset_group.add_argument(
+        "--sat-no-reset-between-levels",
+        dest="sat_reset_between_levels",
+        action="store_false",
+        help="Do not cleanup between saturation levels",
+    )
+    parser.set_defaults(sat_reset_between_levels=None)
     return parser
 
 
@@ -174,49 +326,143 @@ def main():
         "--no-results",
     ]
     run_step(warmup_cmd, "Running warmup")
-    cleanup_sut(args.app, args.cooldown_seconds)
 
-    for index in range(1, args.count + 1):
-        print(f"=== Experiment {index}/{args.count} ===")
-        iteration_dir = create_iteration_directory(batch_dir)
-        run_experiment_cmd = [
-            sys.executable,
-            str(SCRIPT_DIR / "run_experiment.py"),
-            "--app",
+    if args.saturation_enabled:
+        saturation = resolve_saturation_settings(args)
+        cleanup_sut(
             args.app,
-            "--workload",
-            args.workload,
-            "--locustfile",
-            args.locustfile,
-            "--run-dir",
-            str(iteration_dir),
-        ]
-        completed = run_step(run_experiment_cmd, "Running experiment")
-        run_dir = extract_run_dir(completed.stderr or completed.stdout)
-        created_runs.append(run_dir)
+            saturation["cooldown_seconds"] if saturation["reset_between_levels"] else 0,
+        )
 
-        query_cmd = [
-            sys.executable,
-            str(SCRIPT_DIR / "query_prometheus.py"),
-            "--run-dir",
-            str(run_dir),
-            "--prom-url",
-            args.prom_url,
-            "--energy-source",
-            args.energy_source,
-        ]
-        run_step(query_cmd, "Querying Prometheus")
+        saturation_plan = {
+            "mode": "stepwise",
+            "created_at": datetime.now().isoformat(),
+            "app": args.app,
+            "workload": args.workload,
+            "locustfile": args.locustfile,
+            "prom_url": args.prom_url,
+            "energy_source": args.energy_source,
+            "levels": saturation["levels"],
+            "dwell_seconds": saturation["dwell_seconds"],
+            "spawn_rate": saturation["spawn_rate"],
+            "ramp_exclusion_seconds": saturation["ramp_exclusion_seconds"],
+            "reset_between_levels": saturation["reset_between_levels"],
+            "cooldown_seconds": saturation["cooldown_seconds"],
+            "runs": [],
+        }
+        saturation_plan_path = Path(batch_dir) / "saturation_plan.json"
+        write_json(saturation_plan_path, saturation_plan)
 
-        summarise_cmd = [
-            sys.executable,
-            str(SCRIPT_DIR / "summarise_run.py"),
-            "--run-dir",
-            str(run_dir),
-        ]
-        run_step(summarise_cmd, "Summarising run")
+        total_levels = len(saturation["levels"])
+        for index, level in enumerate(saturation["levels"], start=1):
+            print(f"=== Saturation level {index}/{total_levels}: users={level} ===")
+            iteration_dir = create_saturation_iteration_directory(batch_dir, level)
+            run_experiment_cmd = [
+                sys.executable,
+                str(SCRIPT_DIR / "run_experiment.py"),
+                "--app",
+                args.app,
+                "--workload",
+                args.workload,
+                "--locustfile",
+                args.locustfile,
+                "--run-dir",
+                str(iteration_dir),
+                "--users",
+                str(level),
+                "--spawn-rate",
+                str(saturation["spawn_rate"]),
+                "--duration",
+                str(saturation["dwell_seconds"]),
+                "--ramp-exclusion-seconds",
+                str(saturation["ramp_exclusion_seconds"]),
+            ]
+            completed = run_step(run_experiment_cmd, "Running saturation level")
+            run_dir = extract_run_dir(completed.stderr or completed.stdout)
+            created_runs.append(run_dir)
 
-        cleanup_sleep = args.cooldown_seconds if index < args.count else 0
-        cleanup_sut(args.app, cleanup_sleep)
+            query_cmd = [
+                sys.executable,
+                str(SCRIPT_DIR / "query_prometheus.py"),
+                "--run-dir",
+                str(run_dir),
+                "--prom-url",
+                args.prom_url,
+                "--energy-source",
+                args.energy_source,
+            ]
+            run_step(query_cmd, "Querying Prometheus")
+
+            summarise_cmd = [
+                sys.executable,
+                str(SCRIPT_DIR / "summarise_run.py"),
+                "--run-dir",
+                str(run_dir),
+                "--ramp-exclusion-seconds",
+                str(saturation["ramp_exclusion_seconds"]),
+            ]
+            run_step(summarise_cmd, "Summarising run")
+
+            saturation_plan["runs"].append(
+                {
+                    "user_level": level,
+                    "run_dir": str(run_dir),
+                }
+            )
+            write_json(saturation_plan_path, saturation_plan)
+
+            if saturation["reset_between_levels"]:
+                cleanup_sleep = (
+                    saturation["cooldown_seconds"] if index < total_levels else 0
+                )
+                cleanup_sut(args.app, cleanup_sleep)
+
+        if not saturation["reset_between_levels"]:
+            cleanup_sut(args.app, 0)
+    else:
+        cleanup_sut(args.app, args.cooldown_seconds)
+
+        for index in range(1, args.count + 1):
+            print(f"=== Experiment {index}/{args.count} ===")
+            iteration_dir = create_iteration_directory(batch_dir)
+            run_experiment_cmd = [
+                sys.executable,
+                str(SCRIPT_DIR / "run_experiment.py"),
+                "--app",
+                args.app,
+                "--workload",
+                args.workload,
+                "--locustfile",
+                args.locustfile,
+                "--run-dir",
+                str(iteration_dir),
+            ]
+            completed = run_step(run_experiment_cmd, "Running experiment")
+            run_dir = extract_run_dir(completed.stderr or completed.stdout)
+            created_runs.append(run_dir)
+
+            query_cmd = [
+                sys.executable,
+                str(SCRIPT_DIR / "query_prometheus.py"),
+                "--run-dir",
+                str(run_dir),
+                "--prom-url",
+                args.prom_url,
+                "--energy-source",
+                args.energy_source,
+            ]
+            run_step(query_cmd, "Querying Prometheus")
+
+            summarise_cmd = [
+                sys.executable,
+                str(SCRIPT_DIR / "summarise_run.py"),
+                "--run-dir",
+                str(run_dir),
+            ]
+            run_step(summarise_cmd, "Summarising run")
+
+            cleanup_sleep = args.cooldown_seconds if index < args.count else 0
+            cleanup_sut(args.app, cleanup_sleep)
 
     visualise_cmd = [
         sys.executable,
