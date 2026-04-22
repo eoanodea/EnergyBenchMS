@@ -34,11 +34,11 @@ To run the same experiment multiple times, query each run, summarise each run, a
 
 ```bash
 python scripts/run_pipeline.py \
-  --count 3 \
+  --count 5 \
   --app apps/simple-web \
   --workload workloads/simple-web.yaml \
   --locustfile apps/simple-web/locustfile.py \
-  --cooldown-seconds 30 \
+  --cooldown-seconds 60 \
   --energy-source auto \
   --prom-url http://192.168.0.100:9090
 ```
@@ -141,29 +141,3 @@ python scripts/cleanup_sut.py \
 ```
 
 The cleanup step deletes only the manifests in the application directory, waits for the matching SUT pods to terminate in the app's namespace, and does not touch observability components or other namespaces.
-
-## Setting up an SSH tunnel
-
-To set up an SSH tunnel, you can use the following command:
-
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_framelab -C "framelab"
-```
-
-In our case, we called the key `framelab`
-
-Copy the public key to the server:
-
-```bash
-ssh-copy-id -i ~/.ssh/id_ed25519_framelab.pub user@server_ip
-```
-
-Then, add the configuration to your SSH config file (`~/.ssh/config`):
-
-```bash
-Host framelab
-    HostName server_ip
-    User user
-    IdentityFile ~/.ssh/id_ed25519_framelab
-    LocalForward 8080 localhost:8080
-```

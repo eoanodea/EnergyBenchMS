@@ -246,6 +246,8 @@ def compute_calibration_row(user_level, run_dir):
     """Build one calibration CSV row from run outputs."""
     summary = load_json(Path(run_dir) / "summary.json")
     metadata = load_json(Path(run_dir) / "metadata.json")
+    query_info_path = Path(run_dir) / "query_info.json"
+    query_info = load_json(query_info_path) if query_info_path.exists() else {}
 
     workload = summary.get("workload", {}) if isinstance(summary, dict) else {}
     cpu_total = summary.get("cpu_total", {}) if isinstance(summary, dict) else {}
@@ -255,6 +257,7 @@ def compute_calibration_row(user_level, run_dir):
     error_rate = workload.get("error_rate")
     cpu_mean = cpu_total.get("mean") if isinstance(cpu_total, dict) else None
     cpu_max = cpu_total.get("max") if isinstance(cpu_total, dict) else None
+    selected_energy_source = query_info.get("selected_energy_source", "")
 
     effective_duration = parse_effective_duration_seconds(metadata)
     energy_mean = sum_energy_mean(summary)
@@ -274,6 +277,7 @@ def compute_calibration_row(user_level, run_dir):
 
     return {
         "user_level": user_level,
+        "energy_source": selected_energy_source,
         "throughput_mean": throughput_mean_rps if throughput_mean_rps is not None else "",
         "cpu_mean": cpu_mean if cpu_mean is not None else "",
         "cpu_max": cpu_max if cpu_max is not None else "",
@@ -297,6 +301,7 @@ def write_calibration_summary(batch_dir, saturation_plan):
     output_path = Path(batch_dir) / "calibration_summary.csv"
     fieldnames = [
         "user_level",
+        "energy_source",
         "throughput_mean",
         "cpu_mean",
         "cpu_max",

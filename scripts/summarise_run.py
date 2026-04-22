@@ -189,6 +189,27 @@ def build_summary(energy_stats, cpu_k8s_stats, cpu_total_stats, workload_summary
     return summary
 
 
+def load_energy_source_info(run_dir):
+    """Load selected energy source metadata when available."""
+    query_info_path = Path(run_dir) / "query_info.json"
+    if not query_info_path.exists():
+        return {}
+
+    try:
+        query_info = load_json(query_info_path)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    selected = query_info.get("selected_energy_source")
+    requested = query_info.get("requested_energy_source")
+    result = {}
+    if selected:
+        result["selected_energy_source"] = selected
+    if requested:
+        result["requested_energy_source"] = requested
+    return result
+
+
 def save_summary_json(run_dir, summary):
     output_path = Path(run_dir) / "summary.json"
     with output_path.open("w", encoding="utf-8") as outfile:
@@ -344,6 +365,9 @@ def main():
         cpu_total_stats,
         workload_summary,
     )
+    energy_source_info = load_energy_source_info(run_dir)
+    if energy_source_info:
+        summary["energy_source"] = energy_source_info
 
     print("saving outputs")
     save_summary_json(run_dir, summary)

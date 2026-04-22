@@ -245,11 +245,20 @@ def main():
     )
 
     print("Saving results")
+    query_info = {
+        "requested_energy_source": args.energy_source,
+        "selected_energy_source": selected_energy_source,
+        "query_window": {
+            "workload_start": workload_start,
+            "workload_end": workload_end,
+        },
+    }
     save_results(run_dir, "energy.json", energy_results)
     save_results(run_dir, "cpu_total.json", cpu_total_results)
     save_results(run_dir, "cpu_by_container.json", cpu_by_container_results)
     save_results(run_dir, "cpu_k8s_by_id.json", cpu_k8s_by_id_results)
     save_results(run_dir, "cpu.json", cpu_by_container_results)
+    save_results(run_dir, "query_info.json", query_info)
 
 
 if __name__ == "__main__":
