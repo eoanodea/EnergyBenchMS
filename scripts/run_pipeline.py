@@ -88,6 +88,72 @@ def create_saturation_iteration_directory(batch_dir, level):
     return iteration_dir
 
 
+def sanitize_path_component(value):
+    """Convert arbitrary text into a filesystem-safe path component."""
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value).strip())
+    cleaned = cleaned.strip("._-")
+    return cleaned or "workload"
+
+
+def create_workload_scope_directory(batch_dir, workload_label=None):
+    """Create a workload-specific scope directory when multiple workloads are defined."""
+    if workload_label is None:
+        return Path(batch_dir)
+
+    scope_dir = Path(batch_dir) / sanitize_path_component(workload_label)
+    scope_dir.mkdir(parents=True, exist_ok=False)
+    return scope_dir
+
+
+def parse_workload_levels(workload):
+    """Parse optional named workload levels from the workload YAML."""
+    workload_levels = workload.get("workload_levels")
+    if not workload_levels:
+        return [
+            {
+                "label": "default",
+                "users": workload.get("users"),
+                "spawn_rate": workload.get("spawn_rate"),
+                "duration": workload.get("duration"),
+            }
+        ]
+
+    if not isinstance(workload_levels, list):
+        raise ValueError("workload_levels must be a list when provided")
+
+    parsed_levels = []
+    for index, entry in enumerate(workload_levels, start=1):
+        if not isinstance(entry, dict):
+            raise ValueError("Each workload_levels entry must be a mapping")
+
+        label = None
+        users = None
+        spawn_rate = None
+        duration = None
+
+        if len(entry) == 1 and "name" not in entry and "label" not in entry and "users" not in entry:
+            label, users = next(iter(entry.items()))
+        else:
+            label = entry.get("name") or entry.get("label") or f"workload_{index}"
+            users = entry.get("users")
+            spawn_rate = entry.get("spawn_rate")
+            duration = entry.get("duration")
+
+        if users is None:
+            raise ValueError(f"workload_levels entry '{label}' is missing a users value")
+
+        parsed_levels.append(
+            {
+                "label": sanitize_path_component(label),
+                "users": int(users),
+                "spawn_rate": spawn_rate,
+                "duration": duration,
+            }
+        )
+
+    return parsed_levels
+
+
 def extract_run_dir(output_text):
     """Extract the run directory path from run_experiment output."""
     match = RUN_DIR_PATTERN.search(output_text)
@@ -193,6 +259,12 @@ def write_json(path, payload):
     """Write JSON payload to disk."""
     with Path(path).open("w", encoding="utf-8") as outfile:
         json.dump(payload, outfile, indent=2)
+
+
+def write_workload_plan(batch_dir, plan):
+    """Persist the workload-level execution plan."""
+    output_path = Path(batch_dir) / "workload_plan.json"
+    write_json(output_path, plan)
 
 
 def load_json(path):
@@ -460,22 +532,24 @@ def main():
     batch_dir = create_batch_directory(args.runs_dir, sut_name)
     created_runs = []
     output_path = batch_dir / Path(args.output).name
-
-    print("=== Warmup ===")
-    warmup_cmd = [
-        sys.executable,
-        str(SCRIPT_DIR / "run_experiment.py"),
-        "--app",
-        args.app,
-        "--workload",
-        args.workload,
-        "--locustfile",
-        args.locustfile,
-        "--no-results",
-    ]
-    run_step(warmup_cmd, "Running warmup")
+    workload_settings = load_workload_yaml(args.workload)
+    workload_levels = parse_workload_levels(workload_settings)
 
     if args.saturation_enabled:
+        print("=== Warmup ===")
+        warmup_cmd = [
+            sys.executable,
+            str(SCRIPT_DIR / "run_experiment.py"),
+            "--app",
+            args.app,
+            "--workload",
+            args.workload,
+            "--locustfile",
+            args.locustfile,
+            "--no-results",
+        ]
+        run_step(warmup_cmd, "Running warmup")
+
         saturation = resolve_saturation_settings(args)
         cleanup_sut(
             args.app,
@@ -589,12 +663,121 @@ def main():
         ]
         run_step(analyse_cmd, "Analysing saturation")
     else:
-        cleanup_sut(args.app, args.cooldown_seconds)
+        multiple_workloads = len(workload_levels) > 1 or workload_levels[0].get("label") != "default"
 
-        for index in range(1, args.count + 1):
-            print(f"=== Experiment {index}/{args.count} ===")
-            iteration_dir = create_iteration_directory(batch_dir)
-            run_experiment_cmd = [
+        if multiple_workloads:
+            workload_plan = {
+                "mode": "multi_workload",
+                "created_at": datetime.now().isoformat(),
+                "app": args.app,
+                "workload": args.workload,
+                "locustfile": args.locustfile,
+                "prom_url": args.prom_url,
+                "energy_source": args.energy_source,
+                "count": args.count,
+                "workload_levels": workload_levels,
+                "runs": [],
+            }
+            write_workload_plan(batch_dir, workload_plan)
+
+            total_workloads = len(workload_levels)
+            total_runs = total_workloads * args.count
+            overall_run_index = 0
+
+            for workload_index, workload_level in enumerate(workload_levels, start=1):
+                workload_label = workload_level["label"]
+                workload_scope_dir = create_workload_scope_directory(batch_dir, workload_label)
+
+                print(f"=== Warmup: {workload_label} ({workload_index}/{total_workloads}) ===")
+                warmup_cmd = [
+                    sys.executable,
+                    str(SCRIPT_DIR / "run_experiment.py"),
+                    "--app",
+                    args.app,
+                    "--workload",
+                    args.workload,
+                    "--locustfile",
+                    args.locustfile,
+                    "--no-results",
+                    "--users",
+                    str(workload_level["users"]),
+                    "--workload-label",
+                    workload_label,
+                ]
+                if workload_level.get("spawn_rate") is not None:
+                    warmup_cmd.extend(["--spawn-rate", str(workload_level["spawn_rate"])])
+                if workload_level.get("duration") is not None:
+                    warmup_cmd.extend(["--duration", str(workload_level["duration"])])
+                run_step(warmup_cmd, f"Running warmup for {workload_label}")
+                cleanup_sut(args.app, args.cooldown_seconds)
+
+                for iteration in range(1, args.count + 1):
+                    overall_run_index += 1
+                    print(
+                        f"=== Experiment {overall_run_index}/{total_runs}: {workload_label} "
+                        f"({iteration}/{args.count}) ==="
+                    )
+                    iteration_dir = create_iteration_directory(workload_scope_dir)
+                    run_experiment_cmd = [
+                        sys.executable,
+                        str(SCRIPT_DIR / "run_experiment.py"),
+                        "--app",
+                        args.app,
+                        "--workload",
+                        args.workload,
+                        "--locustfile",
+                        args.locustfile,
+                        "--run-dir",
+                        str(iteration_dir),
+                        "--users",
+                        str(workload_level["users"]),
+                        "--workload-label",
+                        workload_label,
+                    ]
+                    if workload_level.get("spawn_rate") is not None:
+                        run_experiment_cmd.extend(["--spawn-rate", str(workload_level["spawn_rate"])])
+                    if workload_level.get("duration") is not None:
+                        run_experiment_cmd.extend(["--duration", str(workload_level["duration"])])
+
+                    completed = run_step(run_experiment_cmd, "Running experiment")
+                    run_dir = extract_run_dir(completed.stderr or completed.stdout)
+                    created_runs.append(run_dir)
+
+                    query_cmd = [
+                        sys.executable,
+                        str(SCRIPT_DIR / "query_prometheus.py"),
+                        "--run-dir",
+                        str(run_dir),
+                        "--prom-url",
+                        args.prom_url,
+                        "--energy-source",
+                        args.energy_source,
+                    ]
+                    run_step(query_cmd, "Querying Prometheus")
+
+                    summarise_cmd = [
+                        sys.executable,
+                        str(SCRIPT_DIR / "summarise_run.py"),
+                        "--run-dir",
+                        str(run_dir),
+                    ]
+                    run_step(summarise_cmd, "Summarising run")
+
+                    workload_plan["runs"].append(
+                        {
+                            "workload_label": workload_label,
+                            "iteration": iteration,
+                            "run_dir": str(run_dir),
+                        }
+                    )
+                    write_workload_plan(batch_dir, workload_plan)
+
+                    cleanup_sleep = args.cooldown_seconds if overall_run_index < total_runs else 0
+                    cleanup_sut(args.app, cleanup_sleep)
+
+        else:
+            print("=== Warmup ===")
+            warmup_cmd = [
                 sys.executable,
                 str(SCRIPT_DIR / "run_experiment.py"),
                 "--app",
@@ -603,35 +786,52 @@ def main():
                 args.workload,
                 "--locustfile",
                 args.locustfile,
-                "--run-dir",
-                str(iteration_dir),
+                "--no-results",
             ]
-            completed = run_step(run_experiment_cmd, "Running experiment")
-            run_dir = extract_run_dir(completed.stderr or completed.stdout)
-            created_runs.append(run_dir)
+            run_step(warmup_cmd, "Running warmup")
+            cleanup_sut(args.app, args.cooldown_seconds)
 
-            query_cmd = [
-                sys.executable,
-                str(SCRIPT_DIR / "query_prometheus.py"),
-                "--run-dir",
-                str(run_dir),
-                "--prom-url",
-                args.prom_url,
-                "--energy-source",
-                args.energy_source,
-            ]
-            run_step(query_cmd, "Querying Prometheus")
+            for index in range(1, args.count + 1):
+                print(f"=== Experiment {index}/{args.count} ===")
+                iteration_dir = create_iteration_directory(batch_dir)
+                run_experiment_cmd = [
+                    sys.executable,
+                    str(SCRIPT_DIR / "run_experiment.py"),
+                    "--app",
+                    args.app,
+                    "--workload",
+                    args.workload,
+                    "--locustfile",
+                    args.locustfile,
+                    "--run-dir",
+                    str(iteration_dir),
+                ]
+                completed = run_step(run_experiment_cmd, "Running experiment")
+                run_dir = extract_run_dir(completed.stderr or completed.stdout)
+                created_runs.append(run_dir)
 
-            summarise_cmd = [
-                sys.executable,
-                str(SCRIPT_DIR / "summarise_run.py"),
-                "--run-dir",
-                str(run_dir),
-            ]
-            run_step(summarise_cmd, "Summarising run")
+                query_cmd = [
+                    sys.executable,
+                    str(SCRIPT_DIR / "query_prometheus.py"),
+                    "--run-dir",
+                    str(run_dir),
+                    "--prom-url",
+                    args.prom_url,
+                    "--energy-source",
+                    args.energy_source,
+                ]
+                run_step(query_cmd, "Querying Prometheus")
 
-            cleanup_sleep = args.cooldown_seconds if index < args.count else 0
-            cleanup_sut(args.app, cleanup_sleep)
+                summarise_cmd = [
+                    sys.executable,
+                    str(SCRIPT_DIR / "summarise_run.py"),
+                    "--run-dir",
+                    str(run_dir),
+                ]
+                run_step(summarise_cmd, "Summarising run")
+
+                cleanup_sleep = args.cooldown_seconds if index < args.count else 0
+                cleanup_sut(args.app, cleanup_sleep)
 
     visualise_cmd = [
         sys.executable,

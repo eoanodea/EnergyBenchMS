@@ -225,12 +225,14 @@ def save_metadata(
     timestamps,
     ramp_exclusion_seconds,
     locust_artifacts,
+    workload_label=None,
 ):
     """Save experiment metadata to JSON file."""
     metadata = {
         "app_path": str(Path(app_path).absolute()),
         "workload_path": str(Path(workload_path).absolute()),
         "workload_parameters": workload,
+        "workload_label": workload_label,
         "ramp_exclusion_seconds": ramp_exclusion_seconds,
         "locust_artifacts": locust_artifacts,
         "timestamps": {
@@ -276,6 +278,10 @@ def main():
     parser.add_argument(
         "--run-dir",
         help="Optional output directory for the run results"
+    )
+    parser.add_argument(
+        "--workload-label",
+        help="Optional workload label/name for grouped runs"
     )
     parser.add_argument(
         "--users",
@@ -382,6 +388,7 @@ def main():
                 timestamps,
                 ramp_exclusion_seconds,
                 locust_artifacts,
+                workload_label=args.workload_label,
             )
             
             logger.info("=" * 60)

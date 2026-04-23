@@ -46,6 +46,29 @@ python scripts/run_pipeline.py \
 The pipeline performs one warmup run before the measured runs and waits for the configured cooldown after warmup and between each measured run.
 It also creates a batch directory under `runs/` named like `timestamp_sutname`, with measured runs stored as `iteration_timestamp` directories inside it.
 
+## Multiple workload levels
+
+You can also define named workload levels in the workload YAML. This applies to the standard pipeline path and keeps saturation mode separate.
+
+Example:
+
+```yaml
+workload_levels:
+  - low: 20
+  - medium: 40
+  - high: 60
+```
+
+When `workload_levels` is present, `run_pipeline.py` will run `--count` iterations for each named workload level. The output directories will include the workload name, for example:
+
+```text
+runs/<batch>/low/iteration_...
+runs/<batch>/medium/iteration_...
+runs/<batch>/high/iteration_...
+```
+
+Each workload level gets its own warmup before the measured iterations, and the batch manifest records which runs belong to which label.
+
 ## Saturation calibration mode (stepwise)
 
 Use saturation mode to run fixed user levels with fixed dwell time and reset/cooldown between levels.
