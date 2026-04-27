@@ -1,4 +1,4 @@
-target: http://192.168.0.100:30007
+target: http://192.168.0.100:30001
 users: 60
 workload_levels:
   - low: 20
@@ -6,7 +6,7 @@ workload_levels:
   - high: 80
 spawn_rate: 5
 duration: 120
-port: 30007
+port: 30001
 saturation:
   levels: [20, 40, 60, 80, 100, 150, 200, 300, 500]
   dwell_seconds: 120
