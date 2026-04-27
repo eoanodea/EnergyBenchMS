@@ -10,10 +10,24 @@ import json
 import logging
 import subprocess
 import sys
+import tempfile
 import time
 import yaml
 from datetime import datetime, timedelta
 from pathlib import Path
+
+from app_config import (
+    extract_deployments,
+    filter_manifest_documents,
+    infer_sut_name,
+    load_app_config,
+    load_manifest_documents,
+    manifest_namespace,
+    resolve_excluded_kinds,
+    resolve_exclusion_patterns,
+    resolve_manifest_source,
+    resolve_namespace,
+)
 
 
 # Configure logging
@@ -31,24 +45,6 @@ def load_workload(workload_path):
         workload = yaml.safe_load(f)
     logger.info(f"Workload loaded: {workload}")
     return workload
-
-
-def get_deployment_name(app_path):
-    """Extract deployment name from Kubernetes manifests in app directory."""
-    deployment_file = Path(app_path) / "deployment.yaml"
-    
-    if not deployment_file.exists():
-        raise FileNotFoundError(f"No deployment.yaml found in {app_path}")
-    
-    with open(deployment_file, 'r') as f:
-        deployment = yaml.safe_load(f)
-    
-    name = deployment.get('metadata', {}).get('name')
-    if not name:
-        raise ValueError("Could not extract deployment name from deployment.yaml")
-    
-    logger.info(f"Found deployment name: {name}")
-    return name
 
 
 def run_command(cmd, check=True):
@@ -75,31 +71,64 @@ def resolve_locustfile(locust_file, app_path):
     return cwd_candidate
 
 
-def deploy_app(app_path):
-    """Deploy application using kubectl apply."""
-    logger.info(f"Deploying application from {app_path}")
-    app_path = Path(app_path)
-    
-    if not app_path.exists():
-        raise FileNotFoundError(f"App path does not exist: {app_path}")
-    
-    cmd = ["kubectl", "apply", "-f", str(app_path)]
+def write_filtered_manifest_file(manifests):
+    """Write selected manifests to a temporary file and return its path."""
+    if not manifests:
+        raise ValueError("No manifests left after filtering; nothing to deploy")
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        suffix=".yaml",
+        delete=False,
+    ) as outfile:
+        yaml.safe_dump_all(manifests, outfile, explicit_start=True, sort_keys=False)
+        return Path(outfile.name)
+
+
+def deploy_app(manifest_file):
+    """Deploy application using kubectl apply with a manifest file."""
+    logger.info(f"Deploying application using {manifest_file}")
+    cmd = ["kubectl", "apply", "-f", str(manifest_file)]
     run_command(cmd)
     logger.info("Application deployed")
 
 
-def wait_for_deployment(deployment_name, timeout=300):
-    """Wait for deployment to be ready."""
-    logger.info(f"Waiting for deployment '{deployment_name}' to be ready")
-    cmd = [
-        "kubectl",
-        "rollout",
-        "status",
-        f"deployment/{deployment_name}",
-        f"--timeout={timeout}s"
-    ]
-    run_command(cmd)
-    logger.info(f"Deployment '{deployment_name}' is ready")
+def wait_for_deployments(deployments, timeout=300):
+    """Wait for all deployments to be ready."""
+    if not deployments:
+        logger.info("No deployments found in manifests; skipping rollout wait")
+        return
+
+    for deployment in deployments:
+        deployment_name = deployment["name"]
+        namespace = deployment.get("namespace")
+        logger.info(
+            "Waiting for deployment '%s' to be ready%s",
+            deployment_name,
+            f" in namespace '{namespace}'" if namespace else "",
+        )
+        cmd = [
+            "kubectl",
+            "rollout",
+            "status",
+            f"deployment/{deployment_name}",
+        ]
+        if namespace:
+            cmd.extend(["-n", namespace])
+        cmd.append(f"--timeout={timeout}s")
+        run_command(cmd)
+        logger.info("Deployment '%s' is ready", deployment_name)
+
+
+def describe_exclusions(manifests, filtered_manifests):
+    """Log which resources are excluded after filtering."""
+    excluded = len(manifests) - len(filtered_manifests)
+    logger.info(
+        "Manifest filtering selected %s resources and excluded %s resources",
+        len(filtered_manifests),
+        excluded,
+    )
 
 
 def wait_baseline(duration=20):
@@ -185,6 +214,8 @@ def normalize_ramp_exclusion_seconds(cli_value, workload):
         value = cli_value
     else:
         value = workload.get("ramp_exclusion_seconds", 0)
+
+    manifest_file = None
 
     try:
         ramp_exclusion = int(value)
@@ -303,6 +334,32 @@ def main():
         type=int,
         help="Seconds at workload start to exclude from downstream summaries"
     )
+    parser.add_argument(
+        "--manifest-path",
+        help=(
+            "Optional manifest source path relative to --app (file or directory). "
+            "Defaults to pipeline_app.yaml manifest_path or app root."
+        )
+    )
+    parser.add_argument(
+        "--namespace",
+        help="Optional namespace override for rollout checks"
+    )
+    parser.add_argument(
+        "--exclude-resource-pattern",
+        action="append",
+        default=[],
+        help=(
+            "Regex pattern for resources to exclude from apply/delete. "
+            "Can be repeated. Matches kind/name and namespace/kind/name identities."
+        )
+    )
+    parser.add_argument(
+        "--exclude-kind",
+        action="append",
+        default=[],
+        help="Resource kind to exclude from apply/delete (can be repeated)"
+    )
     
     args = parser.parse_args()
     
@@ -337,14 +394,59 @@ def main():
         resolved_locustfile = resolve_locustfile(args.locustfile, args.app)
         logger.info(f"Resolved locust file path: {resolved_locustfile}")
         
-        # Get deployment name from app manifests
-        deployment_name = get_deployment_name(args.app)
-        
+        app_config = load_app_config(args.app)
+        manifest_source = resolve_manifest_source(
+            args.app,
+            app_config,
+            manifest_path_override=args.manifest_path,
+        )
+        namespace_override = resolve_namespace(app_config, namespace_override=args.namespace)
+        exclusion_patterns = resolve_exclusion_patterns(
+            app_config,
+            extra_patterns=args.exclude_resource_pattern,
+        )
+        excluded_kinds = resolve_excluded_kinds(
+            app_config,
+            extra_kinds=args.exclude_kind,
+        )
+
+        manifests = load_manifest_documents(manifest_source)
+        if not manifests:
+            raise ValueError(f"No manifest documents found in {manifest_source}")
+
+        filtered_manifests = filter_manifest_documents(
+            manifests,
+            excluded_kinds,
+            exclusion_patterns,
+        )
+        describe_exclusions(manifests, filtered_manifests)
+
+        deployment_targets = extract_deployments(
+            filtered_manifests,
+            default_namespace=namespace_override,
+        )
+        if not deployment_targets:
+            logger.warning("No deployment resources found after filtering")
+        else:
+            logger.info(
+                "Deployment targets: %s",
+                ", ".join(
+                    [
+                        f"{item['namespace']}/{item['name']}"
+                        if item.get("namespace")
+                        else item["name"]
+                        for item in deployment_targets
+                    ]
+                ),
+            )
+
+        manifest_file = write_filtered_manifest_file(filtered_manifests)
+
         # Deploy application
-        deploy_app(args.app)
+        deploy_app(manifest_file)
         
-        # Wait for deployment to be ready
-        wait_for_deployment(deployment_name)
+        # Wait for deployments to be ready
+        wait_for_deployments(deployment_targets)
         
         # Wait baseline period
         wait_baseline(20)
@@ -390,6 +492,20 @@ def main():
                 locust_artifacts,
                 workload_label=args.workload_label,
             )
+
+            metadata_file = runs_dir / "metadata.json"
+            with metadata_file.open("r", encoding="utf-8") as infile:
+                metadata = json.load(infile)
+            metadata["deployment"] = {
+                "manifest_source": str(manifest_source),
+                "namespace_override": namespace_override,
+                "excluded_kinds": sorted(excluded_kinds),
+                "excluded_resource_patterns": [pattern.pattern for pattern in exclusion_patterns],
+                "sut_name": infer_sut_name(args.app, filtered_manifests),
+                "deployments": deployment_targets,
+            }
+            with metadata_file.open("w", encoding="utf-8") as outfile:
+                json.dump(metadata, outfile, indent=2)
             
             logger.info("=" * 60)
             logger.info("Experiment completed successfully")
@@ -399,6 +515,12 @@ def main():
     except Exception as e:
         logger.error(f"Experiment failed: {e}", exc_info=True)
         sys.exit(1)
+    finally:
+        if manifest_file is not None:
+            try:
+                manifest_file.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":

@@ -12,6 +12,16 @@ from pathlib import Path
 
 import yaml
 
+from app_config import (
+    filter_manifest_documents,
+    infer_sut_name,
+    load_app_config,
+    load_manifest_documents,
+    resolve_excluded_kinds,
+    resolve_exclusion_patterns,
+    resolve_manifest_source,
+)
+
 
 RUN_DIR_PATTERN = re.compile(r"Results saved to:\s*(runs/\S+)")
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -41,7 +51,19 @@ def run_step(command, description):
     return completed
 
 
-def cleanup_sut(app, cooldown_seconds):
+def append_deployment_overrides(command, args):
+    """Append manifest and exclusion overrides to a subprocess command."""
+    if args.manifest_path:
+        command.extend(["--manifest-path", args.manifest_path])
+    if args.namespace:
+        command.extend(["--namespace", args.namespace])
+    for pattern in args.exclude_resource_pattern:
+        command.extend(["--exclude-resource-pattern", pattern])
+    for kind in args.exclude_kind:
+        command.extend(["--exclude-kind", kind])
+
+
+def cleanup_sut(app, cooldown_seconds, args):
     """Delete the SUT manifests, wait for pods to terminate, then pause."""
     cleanup_cmd = [
         sys.executable,
@@ -51,17 +73,34 @@ def cleanup_sut(app, cooldown_seconds):
         "--sleep-seconds",
         str(cooldown_seconds),
     ]
+    append_deployment_overrides(cleanup_cmd, args)
     run_step(cleanup_cmd, "Cleaning up SUT")
 
 
-def read_sut_name(app_path):
-    """Read the SUT name from the deployment manifest."""
-    deployment_path = Path(app_path) / "deployment.yaml"
-    with deployment_path.open("r", encoding="utf-8") as infile:
-        deployment = yaml.safe_load(infile)
+def read_sut_name(app_path, manifest_path_override=None, exclusion_patterns_override=None, excluded_kinds_override=None):
+    """Read the SUT name from filtered deployment manifests or fallback to app path name."""
+    config = load_app_config(app_path)
+    manifest_source = resolve_manifest_source(
+        app_path,
+        config,
+        manifest_path_override=manifest_path_override,
+    )
+    exclusion_patterns = resolve_exclusion_patterns(
+        config,
+        extra_patterns=exclusion_patterns_override,
+    )
+    excluded_kinds = resolve_excluded_kinds(
+        config,
+        extra_kinds=excluded_kinds_override,
+    )
 
-    name = deployment.get("metadata", {}).get("name")
-    return name or Path(app_path).name
+    manifests = load_manifest_documents(manifest_source)
+    filtered_manifests = filter_manifest_documents(
+        manifests,
+        excluded_kinds,
+        exclusion_patterns,
+    )
+    return infer_sut_name(app_path, filtered_manifests)
 
 
 def create_batch_directory(runs_root, sut_name):
@@ -449,6 +488,32 @@ def build_parser():
         help="Output HTML path (default: runs_comparison.html)",
     )
     parser.add_argument(
+        "--manifest-path",
+        help=(
+            "Optional manifest source path relative to --app (file or directory). "
+            "Defaults to pipeline_app.yaml manifest_path or app root."
+        ),
+    )
+    parser.add_argument(
+        "--namespace",
+        help="Optional namespace override for rollout checks",
+    )
+    parser.add_argument(
+        "--exclude-resource-pattern",
+        action="append",
+        default=[],
+        help=(
+            "Regex pattern for resources to exclude from apply/delete. "
+            "Can be repeated. Matches kind/name and namespace/kind/name identities."
+        ),
+    )
+    parser.add_argument(
+        "--exclude-kind",
+        action="append",
+        default=[],
+        help="Resource kind to exclude from apply/delete (can be repeated)",
+    )
+    parser.add_argument(
         "--saturation-enabled",
         action="store_true",
         help="Enable stepwise saturation mode",
@@ -528,7 +593,12 @@ def main():
     if args.cooldown_seconds < 0:
         raise SystemExit("--cooldown-seconds must be at least 0")
 
-    sut_name = read_sut_name(args.app)
+    sut_name = read_sut_name(
+        args.app,
+        manifest_path_override=args.manifest_path,
+        exclusion_patterns_override=args.exclude_resource_pattern,
+        excluded_kinds_override=args.exclude_kind,
+    )
     batch_dir = create_batch_directory(args.runs_dir, sut_name)
     created_runs = []
     output_path = batch_dir / Path(args.output).name
@@ -548,12 +618,14 @@ def main():
             args.locustfile,
             "--no-results",
         ]
+        append_deployment_overrides(warmup_cmd, args)
         run_step(warmup_cmd, "Running warmup")
 
         saturation = resolve_saturation_settings(args)
         cleanup_sut(
             args.app,
             saturation["cooldown_seconds"] if saturation["reset_between_levels"] else 0,
+            args,
         )
 
         saturation_plan = {
@@ -599,6 +671,7 @@ def main():
                 "--ramp-exclusion-seconds",
                 str(saturation["ramp_exclusion_seconds"]),
             ]
+            append_deployment_overrides(run_experiment_cmd, args)
             completed = run_step(run_experiment_cmd, "Running saturation level")
             run_dir = extract_run_dir(completed.stderr or completed.stdout)
             created_runs.append(run_dir)
@@ -637,10 +710,10 @@ def main():
                 cleanup_sleep = (
                     saturation["cooldown_seconds"] if index < total_levels else 0
                 )
-                cleanup_sut(args.app, cleanup_sleep)
+                cleanup_sut(args.app, cleanup_sleep, args)
 
         if not saturation["reset_between_levels"]:
-            cleanup_sut(args.app, 0)
+            cleanup_sut(args.app, 0, args)
 
         write_calibration_summary(batch_dir, saturation_plan)
 
@@ -708,8 +781,9 @@ def main():
                     warmup_cmd.extend(["--spawn-rate", str(workload_level["spawn_rate"])])
                 if workload_level.get("duration") is not None:
                     warmup_cmd.extend(["--duration", str(workload_level["duration"])])
+                append_deployment_overrides(warmup_cmd, args)
                 run_step(warmup_cmd, f"Running warmup for {workload_label}")
-                cleanup_sut(args.app, args.cooldown_seconds)
+                cleanup_sut(args.app, args.cooldown_seconds, args)
 
                 for iteration in range(1, args.count + 1):
                     overall_run_index += 1
@@ -738,6 +812,7 @@ def main():
                         run_experiment_cmd.extend(["--spawn-rate", str(workload_level["spawn_rate"])])
                     if workload_level.get("duration") is not None:
                         run_experiment_cmd.extend(["--duration", str(workload_level["duration"])])
+                    append_deployment_overrides(run_experiment_cmd, args)
 
                     completed = run_step(run_experiment_cmd, "Running experiment")
                     run_dir = extract_run_dir(completed.stderr or completed.stdout)
@@ -773,7 +848,7 @@ def main():
                     write_workload_plan(batch_dir, workload_plan)
 
                     cleanup_sleep = args.cooldown_seconds if overall_run_index < total_runs else 0
-                    cleanup_sut(args.app, cleanup_sleep)
+                    cleanup_sut(args.app, cleanup_sleep, args)
 
         else:
             print("=== Warmup ===")
@@ -788,8 +863,9 @@ def main():
                 args.locustfile,
                 "--no-results",
             ]
+            append_deployment_overrides(warmup_cmd, args)
             run_step(warmup_cmd, "Running warmup")
-            cleanup_sut(args.app, args.cooldown_seconds)
+            cleanup_sut(args.app, args.cooldown_seconds, args)
 
             for index in range(1, args.count + 1):
                 print(f"=== Experiment {index}/{args.count} ===")
@@ -806,6 +882,7 @@ def main():
                     "--run-dir",
                     str(iteration_dir),
                 ]
+                append_deployment_overrides(run_experiment_cmd, args)
                 completed = run_step(run_experiment_cmd, "Running experiment")
                 run_dir = extract_run_dir(completed.stderr or completed.stdout)
                 created_runs.append(run_dir)
@@ -831,7 +908,7 @@ def main():
                 run_step(summarise_cmd, "Summarising run")
 
                 cleanup_sleep = args.cooldown_seconds if index < args.count else 0
-                cleanup_sut(args.app, cleanup_sleep)
+                cleanup_sut(args.app, cleanup_sleep, args)
 
     visualise_cmd = [
         sys.executable,
