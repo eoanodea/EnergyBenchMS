@@ -8,6 +8,7 @@ import yaml
 
 
 APP_CONFIG_FILENAME = "pipeline_app.yaml"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _as_list(value, field_name):
@@ -21,18 +22,48 @@ def _as_list(value, field_name):
     raise ValueError(f"'{field_name}' must be a string or list")
 
 
-def load_app_config(app_path):
-    """Load optional per-app pipeline configuration."""
-    config_path = Path(app_path) / APP_CONFIG_FILENAME
-    if not config_path.exists():
-        return {}
-
-    with config_path.open("r", encoding="utf-8") as infile:
+def _load_yaml_mapping(path):
+    """Load one YAML mapping file from disk."""
+    with Path(path).open("r", encoding="utf-8") as infile:
         loaded = yaml.safe_load(infile) or {}
 
     if not isinstance(loaded, dict):
-        raise ValueError(f"{APP_CONFIG_FILENAME} must contain a mapping")
+        raise ValueError(f"Config file must contain a mapping: {path}")
     return loaded
+
+
+def candidate_config_paths(app_path):
+    """Yield supported config file paths in priority order."""
+    app = Path(app_path)
+    app_abs = app.resolve()
+
+    candidates = [app_abs / APP_CONFIG_FILENAME]
+
+    # Parent-repo config location for submodule-based app sources.
+    candidates.append(REPO_ROOT / "app-configs" / f"{app_abs.name}.yaml")
+
+    # Optional nested mapping by app relative path (for duplicate app names).
+    try:
+        app_rel = app_abs.relative_to(REPO_ROOT)
+        candidates.append(REPO_ROOT / "app-configs" / app_rel / APP_CONFIG_FILENAME)
+    except ValueError:
+        pass
+
+    seen = set()
+    for candidate in candidates:
+        candidate_resolved = candidate.resolve()
+        if candidate_resolved in seen:
+            continue
+        seen.add(candidate_resolved)
+        yield candidate_resolved
+
+
+def load_app_config(app_path):
+    """Load optional per-app pipeline configuration."""
+    for config_path in candidate_config_paths(app_path):
+        if config_path.exists():
+            return _load_yaml_mapping(config_path)
+    return {}
 
 
 def resolve_manifest_source(app_path, config, manifest_path_override=None):

@@ -46,6 +46,102 @@ python scripts/run_pipeline.py \
 The pipeline performs one warmup run before the measured runs and waits for the configured cooldown after warmup and between each measured run.
 It also creates a batch directory under `runs/` named like `timestamp_sutname`, with measured runs stored as `iteration_timestamp` directories inside it.
 
+## Onboard a new application
+
+For apps that do not match the simple `apps/<name>/deployment.yaml` layout (for example, multi-manifest apps), define a deployment config file.
+
+Supported config locations (priority order):
+
+1. `apps/<app>/pipeline_app.yaml`
+2. `app-configs/<app-name>.yaml` (recommended when `<app>` is a submodule)
+3. `app-configs/<relative-app-path>/pipeline_app.yaml`
+
+Example:
+
+```yaml
+manifest_path: deploy/kubernetes/manifests
+namespace: sock-shop
+exclude_resource_patterns:
+  - "(^|/)prometheus($|[-/])"
+  - "(^|/)kepler($|[-/])"
+  - "(^|/)load-?test($|[-/])"
+```
+
+Fields:
+
+- `manifest_path`: path relative to the app directory, can be a file or directory
+- `namespace`: optional namespace override used for deployment readiness
+- `exclude_resource_patterns`: optional regex list for resources to skip during apply/delete
+- `exclude_kinds`: optional list of resource kinds to skip (for example, `ServiceMonitor`)
+
+This config is used by both deploy and cleanup, so excluded resources are consistently skipped in both phases.
+
+You can also add one-off CLI overrides when needed:
+
+- `--manifest-path`
+- `--namespace`
+- `--exclude-resource-pattern` (repeatable)
+- `--exclude-kind` (repeatable)
+
+## Run sockshop from submodule
+
+This workflow keeps sockshop source as a Git submodule and keeps pipeline config in the main repository at `app-configs/sockshop.yaml`.
+
+### 1. Clone the submodule
+
+If the repository is already cloned:
+
+```bash
+git submodule update --init --recursive apps/sockshop
+```
+
+If cloning from scratch:
+
+```bash
+git clone --recurse-submodules <your-energybench-repo-url>
+cd controller
+```
+
+### 2. Prep for experiment
+
+Install dependencies and verify the app config exists in the main repo:
+
+```bash
+pip install -r requirements.txt
+cat app-configs/sockshop.yaml
+```
+
+Expected `app-configs/sockshop.yaml` content:
+
+```yaml
+manifest_path: deploy/kubernetes/manifests
+namespace: sock-shop
+exclude_resource_patterns:
+  - "(^|/)prometheus($|[-/])"
+  - "(^|/)kepler($|[-/])"
+  - "(^|/)grafana($|[-/])"
+  - "(^|/)jaeger($|[-/])"
+  - "(^|/)alertmanager($|[-/])"
+  - "(^|/)load-?test($|[-/])"
+```
+
+### 3. Execute
+
+Run the standard pipeline command with your provided load assets. No extra deployment flags are needed because `app-configs/sockshop.yaml` is loaded automatically:
+
+```bash
+python scripts/run_pipeline.py \
+  --count 3 \
+  --app apps/sockshop \
+  --workload <path-to-provided-workload-yaml> \
+  --locustfile <path-to-provided-locustfile.py> \
+  --cooldown-seconds 60 \
+  --energy-source auto \
+  --prom-url http://192.168.0.100:9090
+```
+
+If you need temporary overrides for one run, you can still pass `--manifest-path`, `--namespace`, `--exclude-resource-pattern`, and `--exclude-kind`.
+
 ## Multiple workload levels
 
 You can also define named workload levels in the workload YAML. This applies to the standard pipeline path and keeps saturation mode separate.
