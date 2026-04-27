@@ -215,8 +215,6 @@ def normalize_ramp_exclusion_seconds(cli_value, workload):
     else:
         value = workload.get("ramp_exclusion_seconds", 0)
 
-    manifest_file = None
-
     try:
         ramp_exclusion = int(value)
     except (TypeError, ValueError) as exc:
@@ -363,6 +361,8 @@ def main():
     
     args = parser.parse_args()
     
+    manifest_file = None
+
     try:
         # Record experiment start
         timestamps = {
