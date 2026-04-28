@@ -10,23 +10,14 @@ import json
 import logging
 import subprocess
 import sys
-import tempfile
 import time
 import yaml
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from app_config import (
-    extract_deployments,
-    filter_manifest_documents,
     infer_sut_name,
-    load_app_config,
-    load_manifest_documents,
-    manifest_namespace,
-    resolve_excluded_kinds,
-    resolve_exclusion_patterns,
-    resolve_manifest_source,
-    resolve_namespace,
+    load_and_filter_manifests,
 )
 
 
@@ -36,6 +27,8 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+MANAGE_SUT_SCRIPT = Path(__file__).resolve().parent / "manage_sut.py"
 
 
 def load_workload(workload_path):
@@ -71,54 +64,29 @@ def resolve_locustfile(locust_file, app_path):
     return cwd_candidate
 
 
-def write_filtered_manifest_file(manifests):
-    """Write selected manifests to a temporary file and return its path."""
-    if not manifests:
-        raise ValueError("No manifests left after filtering; nothing to deploy")
-
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        suffix=".yaml",
-        delete=False,
-    ) as outfile:
-        yaml.safe_dump_all(manifests, outfile, explicit_start=True, sort_keys=False)
-        return Path(outfile.name)
+def append_deployment_overrides(command, args):
+    """Append manifest and exclusion overrides to a subprocess command."""
+    if args.manifest_path:
+        command.extend(["--manifest-path", args.manifest_path])
+    if args.namespace:
+        command.extend(["--namespace", args.namespace])
+    for pattern in args.exclude_resource_pattern:
+        command.extend(["--exclude-resource-pattern", pattern])
+    for kind in args.exclude_kind:
+        command.extend(["--exclude-kind", kind])
 
 
-def deploy_app(manifest_file):
-    """Deploy application using kubectl apply with a manifest file."""
-    logger.info(f"Deploying application using {manifest_file}")
-    cmd = ["kubectl", "apply", "-f", str(manifest_file)]
-    run_command(cmd)
-    logger.info("Application deployed")
-
-
-def wait_for_deployments(deployments, timeout=300):
-    """Wait for all deployments to be ready."""
-    if not deployments:
-        logger.info("No deployments found in manifests; skipping rollout wait")
-        return
-
-    for deployment in deployments:
-        deployment_name = deployment["name"]
-        namespace = deployment.get("namespace")
-        logger.info(
-            "Waiting for deployment '%s' to be ready%s",
-            deployment_name,
-            f" in namespace '{namespace}'" if namespace else "",
-        )
-        cmd = [
-            "kubectl",
-            "rollout",
-            "status",
-            f"deployment/{deployment_name}",
-        ]
-        if namespace:
-            cmd.extend(["-n", namespace])
-        cmd.append(f"--timeout={timeout}s")
-        run_command(cmd)
-        logger.info("Deployment '%s' is ready", deployment_name)
+def manage_sut_up(app, args):
+    """Deploy the SUT manifests and wait for rollout readiness."""
+    deploy_cmd = [
+        sys.executable,
+        str(MANAGE_SUT_SCRIPT),
+        "up",
+        "--app",
+        app,
+    ]
+    append_deployment_overrides(deploy_cmd, args)
+    run_command(deploy_cmd)
 
 
 def describe_exclusions(manifests, filtered_manifests):
@@ -367,8 +335,6 @@ def main():
     
     args = parser.parse_args()
     
-    manifest_file = None
-
     try:
         # Record experiment start
         timestamps = {
@@ -400,37 +366,22 @@ def main():
         resolved_locustfile = resolve_locustfile(args.locustfile, args.app)
         logger.info(f"Resolved locust file path: {resolved_locustfile}")
         
-        app_config = load_app_config(args.app)
-        manifest_source = resolve_manifest_source(
-            args.app,
-            app_config,
-            manifest_path_override=args.manifest_path,
-        )
-        namespace_override = resolve_namespace(app_config, namespace_override=args.namespace)
-        exclusion_patterns = resolve_exclusion_patterns(
-            app_config,
-            extra_patterns=args.exclude_resource_pattern,
-        )
-        excluded_kinds = resolve_excluded_kinds(
-            app_config,
-            extra_kinds=args.exclude_kind,
-        )
-
-        manifests = load_manifest_documents(manifest_source)
-        if not manifests:
-            raise ValueError(f"No manifest documents found in {manifest_source}")
-
-        filtered_manifests = filter_manifest_documents(
+        (
+            manifest_source,
+            namespace_override,
             manifests,
-            excluded_kinds,
+            filtered_manifests,
+            deployment_targets,
             exclusion_patterns,
+            excluded_kinds,
+        ) = load_and_filter_manifests(
+            args.app,
+            namespace_override=args.namespace,
+            manifest_path_override=args.manifest_path,
+            exclude_resource_patterns=args.exclude_resource_pattern,
+            exclude_kinds=args.exclude_kind,
         )
         describe_exclusions(manifests, filtered_manifests)
-
-        deployment_targets = extract_deployments(
-            filtered_manifests,
-            default_namespace=namespace_override,
-        )
         if not deployment_targets:
             logger.warning("No deployment resources found after filtering")
         else:
@@ -446,13 +397,8 @@ def main():
                 ),
             )
 
-        manifest_file = write_filtered_manifest_file(filtered_manifests)
-
-        # Deploy application
-        deploy_app(manifest_file)
-        
-        # Wait for deployments to be ready
-        wait_for_deployments(deployment_targets)
+        # Deploy application through the shared lifecycle helper.
+        manage_sut_up(args.app, args)
         
         # Wait baseline period
         wait_baseline(20)
@@ -543,12 +489,6 @@ def main():
     except Exception as e:
         logger.error(f"Experiment failed: {e}", exc_info=True)
         sys.exit(1)
-    finally:
-        if manifest_file is not None:
-            try:
-                manifest_file.unlink(missing_ok=True)
-            except OSError:
-                pass
 
 
 if __name__ == "__main__":

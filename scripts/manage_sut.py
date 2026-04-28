@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Delete the SUT manifests and wait until application pods terminate."""
+"""Bring the SUT up or down using the same filtered manifests."""
 
 import argparse
 import subprocess
@@ -8,16 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from app_config import (
-    extract_deployments,
-    filter_manifest_documents,
-    load_app_config,
-    load_manifest_documents,
-    resolve_excluded_kinds,
-    resolve_exclusion_patterns,
-    resolve_manifest_source,
-    resolve_namespace,
-)
+from app_config import load_and_filter_manifests
 
 
 def run_command(command):
@@ -70,6 +61,32 @@ def write_filtered_manifest_file(manifests):
         return Path(outfile.name)
 
 
+def deploy_app(manifest_file):
+    """Deploy application using kubectl apply with a manifest file."""
+    command = ["kubectl", "apply", "-f", str(manifest_file)]
+    run_command(command)
+
+
+def wait_for_deployments(deployments, timeout=300):
+    """Wait for all deployments to be ready."""
+    if not deployments:
+        return
+
+    for deployment in deployments:
+        deployment_name = deployment["name"]
+        namespace = deployment.get("namespace")
+        command = [
+            "kubectl",
+            "rollout",
+            "status",
+            f"deployment/{deployment_name}",
+        ]
+        if namespace:
+            command.extend(["-n", namespace])
+        command.append(f"--timeout={timeout}s")
+        run_command(command)
+
+
 def delete_manifests(manifest_file):
     """Delete only the selected SUT manifests."""
     command = ["kubectl", "delete", "-f", str(manifest_file), "--ignore-not-found"]
@@ -116,27 +133,59 @@ def wait_for_deployment_termination(deployments, timeout_seconds, poll_interval_
         time.sleep(poll_interval_seconds)
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Delete the SUT manifests, wait for pods to terminate, then sleep"
+def load_filtered_sut(
+    app_path,
+    namespace_override=None,
+    manifest_path_override=None,
+    exclude_resource_patterns=None,
+    exclude_kinds=None,
+):
+    """Load and filter manifests for either deploy or cleanup."""
+    (
+        manifest_source,
+        namespace,
+        manifests,
+        filtered_manifests,
+        deployments,
+        exclusion_patterns,
+        excluded_kinds,
+    ) = load_and_filter_manifests(
+        app_path,
+        namespace_override=namespace_override,
+        manifest_path_override=manifest_path_override,
+        exclude_resource_patterns=exclude_resource_patterns,
+        exclude_kinds=exclude_kinds,
     )
-    parser.add_argument(
+
+    manifest_file = write_filtered_manifest_file(filtered_manifests)
+    return manifest_source, namespace, deployments, manifest_file
+
+
+def build_parser():
+    """Build the lifecycle command parser."""
+    parser = argparse.ArgumentParser(
+        description="Deploy or remove the SUT using filtered manifests"
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
         "--app",
         required=True,
         help="Path to the application directory containing the SUT manifests",
     )
-    parser.add_argument(
+    common.add_argument(
         "--namespace",
         help="Optional namespace override; otherwise uses the manifest namespace or current context",
     )
-    parser.add_argument(
+    common.add_argument(
         "--manifest-path",
         help=(
             "Optional manifest source path relative to --app (file or directory). "
             "Defaults to pipeline_app.yaml manifest_path or app root."
         ),
     )
-    parser.add_argument(
+    common.add_argument(
         "--exclude-resource-pattern",
         action="append",
         default=[],
@@ -145,96 +194,98 @@ def main():
             "Can be repeated. Matches kind/name and namespace/kind/name identities."
         ),
     )
-    parser.add_argument(
+    common.add_argument(
         "--exclude-kind",
         action="append",
         default=[],
         help="Resource kind to exclude from apply/delete (can be repeated)",
     )
-    parser.add_argument(
+
+    up = subparsers.add_parser("up", parents=[common], help="Deploy the SUT manifests")
+    up.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=300,
+        help="How long to wait for the SUT deployments to become ready (default: 300)",
+    )
+
+    down = subparsers.add_parser("down", parents=[common], help="Delete the SUT manifests")
+    down.add_argument(
         "--timeout-seconds",
         type=int,
         default=300,
         help="How long to wait for SUT pods to terminate (default: 300)",
     )
-    parser.add_argument(
+    down.add_argument(
         "--poll-interval-seconds",
         type=int,
         default=2,
         help="How often to poll for pod termination (default: 2)",
     )
-    parser.add_argument(
+    down.add_argument(
         "--sleep-seconds",
         type=int,
         default=0,
         help="How long to sleep after the SUT has terminated (default: 0)",
     )
 
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
 
     if args.timeout_seconds < 0:
         raise SystemExit("--timeout-seconds must be at least 0")
-    if args.poll_interval_seconds <= 0:
+    if getattr(args, "poll_interval_seconds", 1) <= 0:
         raise SystemExit("--poll-interval-seconds must be greater than 0")
-    if args.sleep_seconds < 0:
+    if getattr(args, "sleep_seconds", 0) < 0:
         raise SystemExit("--sleep-seconds must be at least 0")
 
     app_path = Path(args.app)
     if not app_path.exists():
         raise FileNotFoundError(f"Application directory does not exist: {app_path}")
 
-    app_config = load_app_config(app_path)
-    manifest_source = resolve_manifest_source(
-        app_path,
-        app_config,
-        manifest_path_override=args.manifest_path,
-    )
-    namespace_override = resolve_namespace(app_config, namespace_override=args.namespace)
-    exclusion_patterns = resolve_exclusion_patterns(
-        app_config,
-        extra_patterns=args.exclude_resource_pattern,
-    )
-    excluded_kinds = resolve_excluded_kinds(
-        app_config,
-        extra_kinds=args.exclude_kind,
-    )
-
-    manifests = load_manifest_documents(manifest_source)
-    if not manifests:
-        raise ValueError(f"No manifest documents found in {manifest_source}")
-    filtered_manifests = filter_manifest_documents(
-        manifests,
-        excluded_kinds,
-        exclusion_patterns,
-    )
-
-    deployments = extract_deployments(
-        filtered_manifests,
-        default_namespace=namespace_override,
-    )
-
-    manifest_file = write_filtered_manifest_file(filtered_manifests)
-
-    print(f"Deleting SUT manifests from {manifest_source}")
-    delete_manifests(manifest_file)
-
-    print("Waiting for SUT deployments to terminate")
-    wait_for_deployment_termination(
-        deployments,
-        args.timeout_seconds,
-        args.poll_interval_seconds,
-    )
-
-    if args.sleep_seconds:
-        print(f"Sleeping for {args.sleep_seconds} seconds after cleanup")
-        time.sleep(args.sleep_seconds)
-
+    manifest_file = None
     try:
-        manifest_file.unlink(missing_ok=True)
-    except OSError:
-        pass
+        manifest_source, namespace, deployments, manifest_file = load_filtered_sut(
+            app_path,
+            namespace_override=args.namespace,
+            manifest_path_override=args.manifest_path,
+            exclude_resource_patterns=args.exclude_resource_pattern,
+            exclude_kinds=args.exclude_kind,
+        )
 
-    print("Cleanup complete")
+        print(f"Using manifests from {manifest_source}")
+        if namespace:
+            print(f"Namespace: {namespace}")
+
+        if args.command == "up":
+            print("Deploying SUT manifests")
+            deploy_app(manifest_file)
+            print("Waiting for SUT deployments to become ready")
+            wait_for_deployments(deployments, timeout=args.timeout_seconds)
+            print("Deploy complete")
+        else:
+            print(f"Deleting SUT manifests from {manifest_source}")
+            delete_manifests(manifest_file)
+            print("Waiting for SUT deployments to terminate")
+            wait_for_deployment_termination(
+                deployments,
+                args.timeout_seconds,
+                args.poll_interval_seconds,
+            )
+            if args.sleep_seconds:
+                print(f"Sleeping for {args.sleep_seconds} seconds after cleanup")
+                time.sleep(args.sleep_seconds)
+            print("Cleanup complete")
+    finally:
+        if manifest_file is not None:
+            try:
+                manifest_file.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":

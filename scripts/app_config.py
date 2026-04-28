@@ -206,3 +206,54 @@ def infer_sut_name(app_path, manifests):
             return str(name)
 
     return Path(app_path).name
+
+
+def load_and_filter_manifests(
+    app_path,
+    namespace_override=None,
+    manifest_path_override=None,
+    exclude_resource_patterns=None,
+    exclude_kinds=None,
+):
+    """Load manifests for an app and apply configured + CLI filters.
+
+    Returns a tuple: (manifest_source, resolved_namespace, manifests,
+    filtered_manifests, deployments, exclusion_patterns, excluded_kinds)
+    """
+    app_config = load_app_config(app_path)
+    manifest_source = resolve_manifest_source(
+        app_path,
+        app_config,
+        manifest_path_override=manifest_path_override,
+    )
+    resolved_namespace = resolve_namespace(app_config, namespace_override=namespace_override)
+    exclusion_patterns = resolve_exclusion_patterns(
+        app_config,
+        extra_patterns=exclude_resource_patterns,
+    )
+    excluded_kinds = resolve_excluded_kinds(
+        app_config,
+        extra_kinds=exclude_kinds,
+    )
+
+    manifests = load_manifest_documents(manifest_source)
+    if not manifests:
+        raise ValueError(f"No manifest documents found in {manifest_source}")
+
+    filtered_manifests = filter_manifest_documents(
+        manifests,
+        excluded_kinds,
+        exclusion_patterns,
+    )
+
+    deployments = extract_deployments(filtered_manifests, default_namespace=resolved_namespace)
+
+    return (
+        manifest_source,
+        resolved_namespace,
+        manifests,
+        filtered_manifests,
+        deployments,
+        exclusion_patterns,
+        excluded_kinds,
+    )

@@ -26,7 +26,7 @@ from app_config import (
 RUN_DIR_PATTERN = re.compile(r"Results saved to:\s*(runs/\S+)")
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
-CLEANUP_SCRIPT = SCRIPT_DIR / "cleanup_sut.py"
+MANAGE_SUT_SCRIPT = SCRIPT_DIR / "manage_sut.py"
 SATURATION_ANALYSE_SCRIPT = SCRIPT_DIR / "saturation_analyse.py"
 
 
@@ -63,11 +63,12 @@ def append_deployment_overrides(command, args):
         command.extend(["--exclude-kind", kind])
 
 
-def cleanup_sut(app, cooldown_seconds, args):
+def manage_sut_down(app, cooldown_seconds, args):
     """Delete the SUT manifests, wait for pods to terminate, then pause."""
     cleanup_cmd = [
         sys.executable,
-        str(CLEANUP_SCRIPT),
+        str(MANAGE_SUT_SCRIPT),
+        "down",
         "--app",
         app,
         "--sleep-seconds",
@@ -626,7 +627,7 @@ def main():
         run_step(warmup_cmd, "Running warmup")
 
         saturation = resolve_saturation_settings(args)
-        cleanup_sut(
+        manage_sut_down(
             args.app,
             saturation["cooldown_seconds"] if saturation["reset_between_levels"] else 0,
             args,
@@ -714,10 +715,10 @@ def main():
                 cleanup_sleep = (
                     saturation["cooldown_seconds"] if index < total_levels else 0
                 )
-                cleanup_sut(args.app, cleanup_sleep, args)
+                manage_sut_down(args.app, cleanup_sleep, args)
 
         if not saturation["reset_between_levels"]:
-            cleanup_sut(args.app, 0, args)
+            manage_sut_down(args.app, 0, args)
 
         write_calibration_summary(batch_dir, saturation_plan)
 
@@ -787,7 +788,7 @@ def main():
                     warmup_cmd.extend(["--duration", str(workload_level["duration"])])
                 append_deployment_overrides(warmup_cmd, args)
                 run_step(warmup_cmd, f"Running warmup for {workload_label}")
-                cleanup_sut(args.app, args.cooldown_seconds, args)
+                manage_sut_down(args.app, args.cooldown_seconds, args)
 
                 for iteration in range(1, args.count + 1):
                     overall_run_index += 1
@@ -852,7 +853,7 @@ def main():
                     write_workload_plan(batch_dir, workload_plan)
 
                     cleanup_sleep = args.cooldown_seconds if overall_run_index < total_runs else 0
-                    cleanup_sut(args.app, cleanup_sleep, args)
+                    manage_sut_down(args.app, cleanup_sleep, args)
 
         else:
             print("=== Warmup ===")
@@ -869,7 +870,7 @@ def main():
             ]
             append_deployment_overrides(warmup_cmd, args)
             run_step(warmup_cmd, "Running warmup")
-            cleanup_sut(args.app, args.cooldown_seconds, args)
+            manage_sut_down(args.app, args.cooldown_seconds, args)
 
             for index in range(1, args.count + 1):
                 print(f"=== Experiment {index}/{args.count} ===")
@@ -912,7 +913,7 @@ def main():
                 run_step(summarise_cmd, "Summarising run")
 
                 cleanup_sleep = args.cooldown_seconds if index < args.count else 0
-                cleanup_sut(args.app, cleanup_sleep, args)
+                manage_sut_down(args.app, cleanup_sleep, args)
 
     visualise_cmd = [
         sys.executable,

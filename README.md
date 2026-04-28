@@ -74,7 +74,7 @@ Fields:
 - `exclude_resource_patterns`: optional regex list for resources to skip during apply/delete
 - `exclude_kinds`: optional list of resource kinds to skip (for example, `ServiceMonitor`)
 
-This config is used by both deploy and cleanup, so excluded resources are consistently skipped in both phases.
+This config is used by both deploy and SUT lifecycle commands, so excluded resources are consistently skipped in both phases.
 
 You can also add one-off CLI overrides when needed:
 
@@ -251,10 +251,23 @@ Threshold defaults:
 
 No smoothing, regressions, or curve fitting are used in this phase.
 
-To clean up only the application stack, you can use:
+To bring the application stack up or down without running a workload, use the lifecycle helper:
 
 ```bash
-python scripts/cleanup_sut.py \
+python scripts/manage_sut.py up \
+  --app apps/simple-web
+
+python scripts/manage_sut.py down \
+  --app apps/simple-web \
+  --sleep-seconds 30
+```
+
+The `up` command applies only the filtered SUT manifests and waits for the deployments to become ready. The `down` command deletes the same filtered manifests, waits for the matching pods to terminate, and then optionally sleeps.
+
+To clean up only the application stack, you can use the lifecycle helper:
+
+```bash
+python scripts/manage_sut.py down \
   --app apps/simple-web \
   --sleep-seconds 30
 ```
