@@ -1,10 +1,15 @@
-manifest_path: deploy/kubernetes/manifests
+manifest_path: deploy/kubernetes/complete-demo.yaml
 namespace: sock-shop
 image_overrides:
   - kind: Deployment
     name: carts-db
     namespace: sock-shop
     container: carts-db
+    image: mongo:3.4
+  - kind: Deployment
+    name: orders-db
+    namespace: sock-shop
+    container: orders-db
     image: mongo:3.4
 exclude_resource_patterns:
   - "(^|/)prometheus($|[-/])"
