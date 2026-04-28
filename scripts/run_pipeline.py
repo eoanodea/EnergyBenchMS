@@ -80,6 +80,10 @@ def cleanup_sut(app, cooldown_seconds, args):
 def read_sut_name(app_path, manifest_path_override=None, exclusion_patterns_override=None, excluded_kinds_override=None):
     """Read the SUT name from filtered deployment manifests or fallback to app path name."""
     config = load_app_config(app_path)
+    configured_namespace = config.get("namespace")
+    if configured_namespace:
+        return str(configured_namespace)
+
     manifest_source = resolve_manifest_source(
         app_path,
         config,
