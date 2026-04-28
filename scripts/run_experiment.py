@@ -255,6 +255,9 @@ def save_metadata(
     ramp_exclusion_seconds,
     locust_artifacts,
     workload_label=None,
+    experiment_status="success",
+    locust_exit_code=None,
+    locust_error=None,
 ):
     """Save experiment metadata to JSON file."""
     metadata = {
@@ -262,6 +265,9 @@ def save_metadata(
         "workload_path": str(Path(workload_path).absolute()),
         "workload_parameters": workload,
         "workload_label": workload_label,
+        "experiment_status": experiment_status,
+        "locust_exit_code": locust_exit_code,
+        "locust_error": locust_error,
         "ramp_exclusion_seconds": ramp_exclusion_seconds,
         "locust_artifacts": locust_artifacts,
         "timestamps": {
@@ -471,16 +477,29 @@ def main():
         timestamps['workload_effective_start'] = effective_start_dt.isoformat()
         
         # Run Locust workload
-        run_locust(workload, resolved_locustfile, csv_prefix=locust_csv_prefix)
+        locust_error = None
+        locust_exit_code = None
+        try:
+            run_locust(workload, resolved_locustfile, csv_prefix=locust_csv_prefix)
+        except subprocess.CalledProcessError as exc:
+            locust_error = str(exc)
+            locust_exit_code = exc.returncode
+            logger.error(f"Locust workload failed: {exc}", exc_info=True)
         
         # Record workload end
         timestamps['workload_end'] = datetime.now().isoformat()
 
         if args.no_results:
-            logger.info("=" * 60)
-            logger.info("Warmup completed successfully")
-            logger.info("No results directory created")
-            logger.info("=" * 60)
+            if locust_error:
+                logger.info("=" * 60)
+                logger.info("Warmup completed with errors, continuing pipeline")
+                logger.info("No results directory created")
+                logger.info("=" * 60)
+            else:
+                logger.info("=" * 60)
+                logger.info("Warmup completed successfully")
+                logger.info("No results directory created")
+                logger.info("=" * 60)
         else:
             save_metadata(
                 runs_dir,
@@ -491,6 +510,9 @@ def main():
                 ramp_exclusion_seconds,
                 locust_artifacts,
                 workload_label=args.workload_label,
+                experiment_status="failed" if locust_error else "success",
+                locust_exit_code=locust_exit_code,
+                locust_error=locust_error,
             )
 
             metadata_file = runs_dir / "metadata.json"
@@ -508,9 +530,15 @@ def main():
                 json.dump(metadata, outfile, indent=2)
             
             logger.info("=" * 60)
-            logger.info("Experiment completed successfully")
+            if locust_error:
+                logger.info("Experiment completed with errors")
+            else:
+                logger.info("Experiment completed successfully")
             logger.info(f"Results saved to: {runs_dir}")
             logger.info("=" * 60)
+
+        if locust_error and not args.no_results:
+            sys.exit(locust_exit_code or 1)
         
     except Exception as e:
         logger.error(f"Experiment failed: {e}", exc_info=True)
