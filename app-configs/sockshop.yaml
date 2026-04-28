@@ -1,5 +1,11 @@
 manifest_path: deploy/kubernetes/manifests
 namespace: sock-shop
+image_overrides:
+  - kind: Deployment
+    name: carts-db
+    namespace: sock-shop
+    container: carts-db
+    image: mongo:3.4
 exclude_resource_patterns:
   - "(^|/)prometheus($|[-/])"
   - "(^|/)kepler($|[-/])"

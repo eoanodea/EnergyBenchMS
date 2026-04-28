@@ -208,6 +208,77 @@ def infer_sut_name(app_path, manifests):
     return Path(app_path).name
 
 
+def apply_image_overrides(manifests, image_overrides):
+    """Apply configured container image overrides to loaded manifests.
+
+    Each override may specify kind, name, namespace, container, and image.
+    """
+    if not image_overrides:
+        return manifests
+
+    for override in image_overrides:
+        if not isinstance(override, dict):
+            raise ValueError("Each image override must be a mapping")
+
+        kind = str(override.get("kind", "")).strip().lower()
+        name = str(override.get("name", "")).strip()
+        namespace = override.get("namespace")
+        container_name = str(override.get("container", "")).strip()
+        image = override.get("image")
+
+        if not kind or not name or not image:
+            raise ValueError(
+                "Image overrides require kind, name, and image"
+            )
+
+        matched = False
+        for manifest in manifests:
+            if str(manifest.get("kind", "")).strip().lower() != kind:
+                continue
+
+            metadata = manifest.get("metadata", {})
+            if str(metadata.get("name", "")).strip() != name:
+                continue
+
+            manifest_namespace = str(metadata.get("namespace", "")).strip()
+            if namespace is not None and manifest_namespace != str(namespace).strip():
+                continue
+
+            containers = (
+                manifest.get("spec", {})
+                .get("template", {})
+                .get("spec", {})
+                .get("containers", [])
+            )
+            if not containers:
+                raise ValueError(f"Manifest {kind}/{name} has no containers to override")
+
+            if container_name:
+                target_containers = [
+                    container for container in containers
+                    if str(container.get("name", "")).strip() == container_name
+                ]
+                if not target_containers:
+                    raise ValueError(
+                        f"Container {container_name!r} not found in {kind}/{name}"
+                    )
+            else:
+                target_containers = [containers[0]]
+
+            for container in target_containers:
+                container["image"] = str(image)
+
+            matched = True
+
+        if not matched:
+            location = f"{kind}/{name}"
+            if namespace is not None:
+                location = f"{namespace}/{location}"
+            raise ValueError(f"Image override did not match any manifest: {location}")
+
+    return manifests
+
+
 def load_and_filter_manifests(
     app_path,
     namespace_override=None,
@@ -245,6 +316,9 @@ def load_and_filter_manifests(
         excluded_kinds,
         exclusion_patterns,
     )
+
+    image_overrides = app_config.get("image_overrides")
+    filtered_manifests = apply_image_overrides(filtered_manifests, image_overrides)
 
     deployments = extract_deployments(filtered_manifests, default_namespace=resolved_namespace)
 
