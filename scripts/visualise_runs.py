@@ -215,8 +215,8 @@ def collect_runs(runs_dir, specific_run=None):
                 run_path = Path(run_dir)
                 if not run_path.is_absolute():
                     run_path = runs_root / run_path
-            if run_path.exists():
-              candidate_dirs.add(run_path)
+                if run_path.exists():
+                    candidate_dirs.add(run_path)
 
     runs = []
     for run_dir in sorted(candidate_dirs):
@@ -307,7 +307,7 @@ def infer_experiment_config(runs_dir, runs, plan):
             warmup_enabled = True
             cleanup_reset_enabled = True
         elif plan.get("_plan_file") == "saturation_plan.json":
-          levels_used = [str(level) for level in plan.get("levels", [])]
+            levels_used = [str(level) for level in plan.get("levels", [])]
             repetitions_per_level = 1
             warmup_enabled = True
             cleanup_reset_enabled = bool(plan.get("reset_between_levels"))
