@@ -1,7 +1,14 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: simple-web
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: simple-web
+  namespace: simple-web
 spec:
   replicas: 1
   selector:
@@ -22,6 +29,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: simple-web
+  namespace: simple-web
 spec:
   type: NodePort
   selector:
