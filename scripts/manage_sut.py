@@ -61,9 +61,9 @@ def write_filtered_manifest_file(manifests):
         return Path(outfile.name)
 
 
-def deploy_app(manifest_file):
+def deploy_app(manifest_file, namespace=None):
     """Deploy application using kubectl apply with a manifest file."""
-    command = ["kubectl", "apply", "-f", str(manifest_file)]
+    command = ["kubectl", "apply", *build_namespace_args(namespace), "-f", str(manifest_file)]
     run_command(command)
 
 
@@ -87,9 +87,16 @@ def wait_for_deployments(deployments, timeout=300):
         run_command(command)
 
 
-def delete_manifests(manifest_file):
+def delete_manifests(manifest_file, namespace=None):
     """Delete only the selected SUT manifests."""
-    command = ["kubectl", "delete", "-f", str(manifest_file), "--ignore-not-found"]
+    command = [
+        "kubectl",
+        "delete",
+        *build_namespace_args(namespace),
+        "-f",
+        str(manifest_file),
+        "--ignore-not-found",
+    ]
     run_command(command)
 
 
@@ -263,13 +270,13 @@ def main():
 
         if args.command == "up":
             print("Deploying SUT manifests")
-            deploy_app(manifest_file)
+            deploy_app(manifest_file, namespace=namespace)
             print("Waiting for SUT deployments to become ready")
             wait_for_deployments(deployments, timeout=args.timeout_seconds)
             print("Deploy complete")
         else:
             print(f"Deleting SUT manifests from {manifest_source}")
-            delete_manifests(manifest_file)
+            delete_manifests(manifest_file, namespace=namespace)
             print("Waiting for SUT deployments to terminate")
             wait_for_deployment_termination(
                 deployments,

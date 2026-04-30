@@ -1,0 +1,2 @@
+manifest_path: deployment.yaml
+namespace: simple-web
