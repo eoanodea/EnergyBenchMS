@@ -161,6 +161,20 @@ def infer_users_duration(metadata):
     return users, duration
 
 
+def infer_power_meter_config(metadata, plan):
+    if isinstance(plan, dict):
+        power_meter = plan.get("power_meter")
+        if isinstance(power_meter, dict):
+            return power_meter
+
+    if isinstance(metadata, dict):
+        power_meter = metadata.get("power_meter")
+        if isinstance(power_meter, dict):
+            return power_meter
+
+    return None
+
+
 def load_plan_payload(runs_dir):
     runs_root = Path(runs_dir)
     for filename in ["workload_plan.json", "saturation_plan.json"]:
@@ -275,11 +289,13 @@ def infer_experiment_config(runs_dir, runs, plan):
     dwell_duration_seconds = None
     ramp_exclusion_seconds = None
     prom_url_masked = None
+    power_meter_config = None
 
     if isinstance(plan, dict):
         app_name = Path(str(plan.get("app", ""))).name or None
         energy_source = plan.get("energy_source")
         prom_url_masked = mask_prom_url(plan.get("prom_url"))
+        power_meter_config = infer_power_meter_config(first_metadata, plan)
 
         if plan.get("_plan_file") == "workload_plan.json":
             levels_used = [
@@ -291,7 +307,7 @@ def infer_experiment_config(runs_dir, runs, plan):
             warmup_enabled = True
             cleanup_reset_enabled = True
         elif plan.get("_plan_file") == "saturation_plan.json":
-            levels_used = [str(level) for level in plan.get("levels", [])]
+          levels_used = [str(level) for level in plan.get("levels", [])]
             repetitions_per_level = 1
             warmup_enabled = True
             cleanup_reset_enabled = bool(plan.get("reset_between_levels"))
@@ -325,12 +341,25 @@ def infer_experiment_config(runs_dir, runs, plan):
             if dwell_duration_seconds is None:
                 dwell_duration_seconds = workload_params.get("duration")
 
+        if power_meter_config is None:
+            power_meter_config = infer_power_meter_config(first_metadata, plan)
+
     if isinstance(first_summary, dict):
         summary_energy_source = first_summary.get("energy_source", {})
         if isinstance(summary_energy_source, dict) and not energy_source:
             energy_source = summary_energy_source.get("requested_energy_source") or summary_energy_source.get(
                 "selected_energy_source"
             )
+
+    if power_meter_config is None and isinstance(first_summary, dict):
+        meter_summary = first_summary.get("physical_power_meter", {})
+        if isinstance(meter_summary, dict):
+            power_meter_config = {
+                "enabled": True,
+                "url": meter_summary.get("source_url"),
+                "interval_seconds": meter_summary.get("interval_seconds"),
+                "request_timeout_seconds": meter_summary.get("request_timeout_seconds"),
+            }
 
     if not levels_used:
         levels_used = sorted(
@@ -361,6 +390,7 @@ def infer_experiment_config(runs_dir, runs, plan):
         "dwell_duration_seconds": dwell_duration_seconds,
         "ramp_exclusion_seconds": ramp_exclusion_seconds,
         "prom_url_masked": prom_url_masked,
+        "power_meter": power_meter_config,
         "experiment_name": Path(runs_dir).name,
     }
 
@@ -379,6 +409,15 @@ def build_run_row(item, sut_container):
     throughput_mean = workload_summary.get("throughput_mean_rps")
     p95_latency = workload_summary.get("p95_latency")
     error_rate = workload_summary.get("error_rate")
+
+    meter_summary = summary.get("physical_power_meter", {}) if isinstance(summary, dict) else {}
+    meter_metrics = meter_summary.get("metrics", {}) if isinstance(meter_summary, dict) else {}
+    meter_power_stats = meter_metrics.get("apower", {}) if isinstance(meter_metrics, dict) else {}
+    meter_energy_stats = meter_metrics.get("aenergy_total", {}) if isinstance(meter_metrics, dict) else {}
+    meter_sample_count = meter_summary.get("sample_count") if isinstance(meter_summary, dict) else None
+    meter_error_count = meter_summary.get("error_count") if isinstance(meter_summary, dict) else None
+    meter_power_mean = meter_power_stats.get("mean") if isinstance(meter_power_stats, dict) else None
+    meter_energy_delta = meter_energy_stats.get("delta") if isinstance(meter_energy_stats, dict) else None
 
     if throughput_mean is None:
         throughput_mean = locust_stats.get("throughput_mean_rps")
@@ -441,6 +480,10 @@ def build_run_row(item, sut_container):
         if energy_total is None or energy_total <= 0:
             flags.append("energy_missing_or_zero")
 
+    meter_enabled = bool((metadata.get("power_meter") or {}).get("url"))
+    if meter_enabled and not isinstance(meter_power_mean, (int, float)):
+        flags.append("power_meter_missing")
+
     return {
         "name": run_name,
         "workload_level": workload_level,
@@ -457,6 +500,10 @@ def build_run_row(item, sut_container):
         "cpu_max": cpu_max,
         "energy_total": energy_total,
         "energy_per_request": energy_per_request,
+        "meter_sample_count": meter_sample_count,
+        "meter_error_count": meter_error_count,
+        "meter_power_mean": meter_power_mean,
+        "meter_energy_delta": meter_energy_delta,
         "flags": flags,
     }
 
@@ -501,6 +548,10 @@ def compute_level_aggregates(run_rows):
                 "cpu_mean_std": safe_stdev([r.get("cpu_mean") for r in rows]),
                 "energy_total_mean": safe_mean([r.get("energy_total") for r in rows]),
                 "energy_total_std": safe_stdev([r.get("energy_total") for r in rows]),
+            "meter_power_mean": safe_mean([r.get("meter_power_mean") for r in rows]),
+            "meter_power_std": safe_stdev([r.get("meter_power_mean") for r in rows]),
+            "meter_energy_delta_mean": safe_mean([r.get("meter_energy_delta") for r in rows]),
+            "meter_energy_delta_std": safe_stdev([r.get("meter_energy_delta") for r in rows]),
             }
         )
 
@@ -793,6 +844,10 @@ def build_html(data):
               <th>CPU Max</th>
               <th>Energy Total</th>
               <th>Energy / Request</th>
+              <th>Meter Samples</th>
+              <th>Meter Power Mean</th>
+              <th>Meter Energy Delta</th>
+              <th>Meter Errors</th>
               <th>Quality Flags</th>
             </tr>
           </thead>
@@ -960,6 +1015,9 @@ def build_html(data):
         ['App', cfg.app_name || '-'],
         ['Environment', cfg.environment_name || '-'],
         ['Energy source', cfg.energy_source || '-'],
+        ['Physical meter', cfg.power_meter ? 'enabled' : 'disabled'],
+        ['Meter URL', (cfg.power_meter && cfg.power_meter.url) ? cfg.power_meter.url : '-'],
+        ['Meter interval seconds', (cfg.power_meter && cfg.power_meter.interval_seconds !== undefined) ? cfg.power_meter.interval_seconds : '-'],
         ['Levels used', Array.isArray(cfg.levels_used) ? cfg.levels_used.join(', ') : '-'],
         ['Repetitions per level', cfg.repetitions_per_level ?? '-'],
         ['Warmup enabled', cfg.warmup_enabled === null || cfg.warmup_enabled === undefined ? '-' : String(cfg.warmup_enabled)],
@@ -1010,13 +1068,17 @@ def build_html(data):
           formatMaybeNumber(r.cpu_max, 6),
           formatMaybeNumber(r.energy_total, 6),
           formatMaybeNumber(r.energy_per_request, 9),
+          r.meter_sample_count ?? '-',
+          formatMaybeNumber(r.meter_power_mean, 6),
+          formatMaybeNumber(r.meter_energy_delta, 6),
+          r.meter_error_count ?? '-',
           (r.flags || []).join(' | ') || '-',
         ];
 
         cells.forEach((value, idx) => {{
           const td = document.createElement('td');
           td.textContent = value;
-          if (idx === 14 && value !== '-') td.className = 'warn';
+          if (idx === 18 && value !== '-') td.className = 'warn';
           tr.appendChild(td);
         }});
 

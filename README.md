@@ -12,6 +12,17 @@ To run an experiment, you can use the following command:
 python scripts/run_experiment.py --app apps/simple-web --workload workloads/simple-web.yaml --locustfile apps/simple-web/locustfile.py
 ```
 
+If you have a physical power meter on the network, you can sample it during the measured run with:
+
+```bash
+python scripts/run_experiment.py \
+  --app apps/simple-web \
+  --workload workloads/simple-web.yaml \
+  --locustfile apps/simple-web/locustfile.py \
+  --power-meter-url http://192.168.0.100/rpc/Switch.GetStatus?id=0 \
+  --power-meter-interval-seconds 5
+```
+
 To compile the results, you can use the following command:
 
 ```bash
@@ -30,6 +41,8 @@ To summarize the results, you can use the following command:
 python scripts/summarise_run.py --run-dir runs/20260413_173747
 ```
 
+When a physical meter CSV is present, `summarise_run.py` adds a `physical_power_meter` block to `summary.json` and extra meter rows to `summary.csv`.
+
 To run the same experiment multiple times, query each run, summarise each run, and generate the comparison dashboard:
 
 ```bash
@@ -42,6 +55,8 @@ python scripts/run_pipeline.py \
   --energy-source auto \
   --prom-url http://192.168.0.100:9090
 ```
+
+If you pass `--power-meter-url` to `run_pipeline.py`, it is forwarded to the measured runs only. Warmup runs remain unchanged, and users who omit the flag get the current behavior.
 
 The pipeline performs one warmup run before the measured runs and waits for the configured cooldown after warmup and between each measured run.
 It also creates a batch directory under `runs/` named like `timestamp_sutname`, with measured runs stored as `iteration_timestamp` directories inside it.

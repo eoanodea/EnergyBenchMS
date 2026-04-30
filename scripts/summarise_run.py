@@ -42,6 +42,22 @@ def safe_float(raw_value):
         return None
 
 
+def parse_effective_duration_seconds(metadata):
+    timestamps = metadata.get("timestamps", {}) if isinstance(metadata, dict) else {}
+    start = timestamps.get("workload_effective_start") or timestamps.get("workload_start")
+    end = timestamps.get("workload_end")
+    if not start or not end:
+        return None
+
+    try:
+        start_dt = datetime.fromisoformat(start)
+        end_dt = datetime.fromisoformat(end)
+    except ValueError:
+        return None
+
+    return max(0.0, (end_dt - start_dt).total_seconds())
+
+
 def parse_prometheus_by_label(prometheus_payload, label_name, min_timestamp=None):
     """Parse Prometheus query_range response into label value -> list of floats."""
     series = {}
@@ -109,6 +125,96 @@ def compute_stats(series_by_container):
             "max": max(values),
         }
     return stats
+
+
+def compute_numeric_stats(values):
+    cleaned = [value for value in values if isinstance(value, (int, float))]
+    if not cleaned:
+        return None
+    return {
+        "mean": sum(cleaned) / len(cleaned),
+        "min": min(cleaned),
+        "max": max(cleaned),
+    }
+
+
+def load_power_meter_samples(run_dir):
+    samples_path = Path(run_dir) / "physical_power_meter.csv"
+    if not samples_path.exists():
+        metadata_path = Path(run_dir) / "metadata.json"
+        if metadata_path.exists():
+            metadata = load_json(metadata_path)
+            meter = metadata.get("power_meter", {}) if isinstance(metadata, dict) else {}
+            meter_samples = meter.get("samples_csv")
+            if meter_samples:
+                samples_path = Path(meter_samples)
+    if not samples_path.exists():
+        return []
+
+    with samples_path.open("r", encoding="utf-8", newline="") as infile:
+        reader = csv.DictReader(infile)
+        return list(reader)
+
+
+def parse_power_meter_samples(run_dir):
+    samples = load_power_meter_samples(run_dir)
+    if not samples:
+        return {}
+
+    numeric_fields = [
+        "apower",
+        "voltage",
+        "freq",
+        "current",
+        "temperature_c",
+        "temperature_f",
+        "aenergy_total",
+        "ret_aenergy_total",
+    ]
+    field_values = {field: [] for field in numeric_fields}
+    successful_samples = []
+    errors = 0
+
+    for row in samples:
+        error_text = (row.get("error") or "").strip()
+        if error_text:
+            errors += 1
+            continue
+
+        parsed_row = {}
+        for field in numeric_fields:
+            value = safe_float(row.get(field))
+            field_values[field].append(value)
+            parsed_row[field] = value
+        successful_samples.append(parsed_row)
+
+    if not successful_samples:
+        return {
+            "sample_count": len(samples),
+            "successful_sample_count": 0,
+            "error_count": errors,
+        }
+
+    meter_summary = {
+        "sample_count": len(samples),
+        "successful_sample_count": len(successful_samples),
+        "error_count": errors,
+        "metrics": {},
+    }
+
+    for field, values in field_values.items():
+        stats = compute_numeric_stats(values)
+        if stats is not None:
+            meter_summary["metrics"][field] = stats
+
+    first_energy = successful_samples[0].get("aenergy_total")
+    last_energy = successful_samples[-1].get("aenergy_total")
+    if isinstance(first_energy, (int, float)) and isinstance(last_energy, (int, float)):
+        meter_summary["metrics"]["aenergy_total"]["start"] = first_energy
+        meter_summary["metrics"]["aenergy_total"]["end"] = last_energy
+        meter_summary["metrics"]["aenergy_total"]["delta"] = last_energy - first_energy
+
+    return meter_summary
 
 
 def parse_locust_workload_metrics(run_dir, min_timestamp=None):
@@ -189,6 +295,37 @@ def build_summary(energy_stats, cpu_k8s_stats, cpu_total_stats, workload_summary
     return summary
 
 
+def build_physical_power_meter_summary(run_dir, metadata, workload_summary):
+    meter_summary = parse_power_meter_samples(run_dir)
+    if not meter_summary:
+        return None
+
+    effective_duration = parse_effective_duration_seconds(metadata)
+    throughput_mean_rps = workload_summary.get("throughput_mean_rps") if isinstance(workload_summary, dict) else None
+    successful_requests = None
+    if isinstance(throughput_mean_rps, (int, float)) and isinstance(effective_duration, (int, float)):
+        successful_requests = throughput_mean_rps * effective_duration
+
+    energy_total_delta = None
+    energy_metrics = meter_summary.get("metrics", {}).get("aenergy_total", {})
+    if isinstance(energy_metrics, dict):
+        energy_total_delta = energy_metrics.get("delta")
+
+    if isinstance(energy_total_delta, (int, float)) and isinstance(successful_requests, (int, float)) and successful_requests > 0:
+        meter_summary["energy_per_request"] = energy_total_delta / successful_requests
+
+    if isinstance(metadata, dict):
+        power_meter_metadata = metadata.get("power_meter", {})
+        if isinstance(power_meter_metadata, dict):
+            meter_summary["source_url"] = power_meter_metadata.get("url")
+            meter_summary["interval_seconds"] = power_meter_metadata.get("interval_seconds")
+            meter_summary["request_timeout_seconds"] = power_meter_metadata.get("request_timeout_seconds")
+            meter_summary["sampler_exit_code"] = power_meter_metadata.get("exit_code")
+            meter_summary["sampler_pid"] = power_meter_metadata.get("pid")
+
+    return meter_summary
+
+
 def load_energy_source_info(run_dir):
     """Load selected energy source metadata when available."""
     query_info_path = Path(run_dir) / "query_info.json"
@@ -225,6 +362,14 @@ def save_summary_csv(run_dir, summary):
         "cpu_max",
         "energy_mean",
         "energy_max",
+        "meter_mean",
+        "meter_min",
+        "meter_max",
+        "meter_start",
+        "meter_end",
+        "meter_delta",
+        "sample_count",
+        "error_count",
     ]
 
     with output_path.open("w", encoding="utf-8", newline="") as outfile:
@@ -239,6 +384,14 @@ def save_summary_csv(run_dir, summary):
                 "cpu_max": "",
                 "energy_mean": energy_entry["mean"],
                 "energy_max": energy_entry["max"],
+                "meter_mean": "",
+                "meter_min": "",
+                "meter_max": "",
+                "meter_start": "",
+                "meter_end": "",
+                "meter_delta": "",
+                "sample_count": "",
+                "error_count": "",
             }
             writer.writerow(row)
 
@@ -251,6 +404,14 @@ def save_summary_csv(run_dir, summary):
                 "cpu_max": cpu_entry["max"],
                 "energy_mean": "",
                 "energy_max": "",
+                "meter_mean": "",
+                "meter_min": "",
+                "meter_max": "",
+                "meter_start": "",
+                "meter_end": "",
+                "meter_delta": "",
+                "sample_count": "",
+                "error_count": "",
             }
             writer.writerow(row)
 
@@ -263,6 +424,75 @@ def save_summary_csv(run_dir, summary):
                 "cpu_max": cpu_total.get("max", ""),
                 "energy_mean": "",
                 "energy_max": "",
+                "meter_mean": "",
+                "meter_min": "",
+                "meter_max": "",
+                "meter_start": "",
+                "meter_end": "",
+                "meter_delta": "",
+                "sample_count": "",
+                "error_count": "",
+            }
+            writer.writerow(row)
+
+        meter = summary.get("physical_power_meter", {})
+        metrics = meter.get("metrics", {}) if isinstance(meter, dict) else {}
+        status_row = {
+            "group": "physical_power_meter",
+            "label": "status",
+            "cpu_mean": "",
+            "cpu_max": "",
+            "energy_mean": "",
+            "energy_max": "",
+            "meter_mean": "",
+            "meter_min": "",
+            "meter_max": "",
+            "meter_start": "",
+            "meter_end": "",
+            "meter_delta": "",
+            "sample_count": meter.get("sample_count", ""),
+            "error_count": meter.get("error_count", ""),
+        }
+        writer.writerow(status_row)
+        for label in ["apower", "voltage", "freq", "current", "temperature_c", "temperature_f"]:
+            stats = metrics.get(label)
+            if not isinstance(stats, dict):
+                continue
+            row = {
+                "group": "physical_power_meter",
+                "label": label,
+                "cpu_mean": "",
+                "cpu_max": "",
+                "energy_mean": "",
+                "energy_max": "",
+                "meter_mean": stats.get("mean", ""),
+                "meter_min": stats.get("min", ""),
+                "meter_max": stats.get("max", ""),
+                "meter_start": "",
+                "meter_end": "",
+                "meter_delta": "",
+                "sample_count": meter.get("sample_count", ""),
+                "error_count": meter.get("error_count", ""),
+            }
+            writer.writerow(row)
+
+        energy_stats = metrics.get("aenergy_total")
+        if isinstance(energy_stats, dict):
+            row = {
+                "group": "physical_power_meter_energy",
+                "label": "aenergy_total",
+                "cpu_mean": "",
+                "cpu_max": "",
+                "energy_mean": "",
+                "energy_max": "",
+                "meter_mean": energy_stats.get("mean", ""),
+                "meter_min": energy_stats.get("min", ""),
+                "meter_max": energy_stats.get("max", ""),
+                "meter_start": energy_stats.get("start", ""),
+                "meter_end": energy_stats.get("end", ""),
+                "meter_delta": energy_stats.get("delta", ""),
+                "sample_count": meter.get("sample_count", ""),
+                "error_count": meter.get("error_count", ""),
             }
             writer.writerow(row)
 
@@ -359,12 +589,17 @@ def main():
     print("processing workload")
     workload_summary = parse_locust_workload_metrics(run_dir, min_timestamp=min_timestamp)
 
+    print("processing physical power meter")
+    physical_power_meter_summary = build_physical_power_meter_summary(run_dir, metadata, workload_summary)
+
     summary = build_summary(
         energy_stats,
         cpu_k8s_stats,
         cpu_total_stats,
         workload_summary,
     )
+    if physical_power_meter_summary:
+        summary["physical_power_meter"] = physical_power_meter_summary
     energy_source_info = load_energy_source_info(run_dir)
     if energy_source_info:
         summary["energy_source"] = energy_source_info

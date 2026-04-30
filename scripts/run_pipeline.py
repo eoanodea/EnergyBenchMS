@@ -63,6 +63,34 @@ def append_deployment_overrides(command, args):
         command.extend(["--exclude-kind", kind])
 
 
+def append_power_meter_overrides(command, args):
+    """Append optional physical power meter settings to a subprocess command."""
+    if not args.power_meter_url:
+        return
+
+    command.extend(["--power-meter-url", args.power_meter_url])
+    if args.power_meter_interval_seconds is not None:
+        command.extend(["--power-meter-interval-seconds", str(args.power_meter_interval_seconds)])
+    if args.power_meter_request_timeout_seconds is not None:
+        command.extend([
+            "--power-meter-request-timeout-seconds",
+            str(args.power_meter_request_timeout_seconds),
+        ])
+
+
+def build_power_meter_config(args):
+    """Create a serializable power meter config block when enabled."""
+    if not args.power_meter_url:
+        return None
+
+    return {
+        "enabled": True,
+        "url": args.power_meter_url,
+        "interval_seconds": args.power_meter_interval_seconds,
+        "request_timeout_seconds": args.power_meter_request_timeout_seconds,
+    }
+
+
 def manage_sut_down(app, cooldown_seconds, args):
     """Delete the SUT manifests, wait for pods to terminate, then pause."""
     cleanup_cmd = [
@@ -477,6 +505,22 @@ def build_parser():
         ),
     )
     parser.add_argument(
+        "--power-meter-url",
+        help="Optional physical power meter API URL to sample during measured runs",
+    )
+    parser.add_argument(
+        "--power-meter-interval-seconds",
+        type=float,
+        default=5.0,
+        help="Interval between physical power meter samples in seconds (default: 5)",
+    )
+    parser.add_argument(
+        "--power-meter-request-timeout-seconds",
+        type=float,
+        default=5.0,
+        help="HTTP timeout for each physical power meter sample request (default: 5)",
+    )
+    parser.add_argument(
         "--cooldown-seconds",
         type=int,
         default=0,
@@ -641,6 +685,7 @@ def main():
             "locustfile": args.locustfile,
             "prom_url": args.prom_url,
             "energy_source": args.energy_source,
+            "power_meter": build_power_meter_config(args),
             "levels": saturation["levels"],
             "dwell_seconds": saturation["dwell_seconds"],
             "spawn_rate": saturation["spawn_rate"],
@@ -677,6 +722,7 @@ def main():
                 str(saturation["ramp_exclusion_seconds"]),
             ]
             append_deployment_overrides(run_experiment_cmd, args)
+            append_power_meter_overrides(run_experiment_cmd, args)
             completed = run_step(run_experiment_cmd, "Running saturation level")
             run_dir = extract_run_dir(completed.stderr or completed.stdout)
             created_runs.append(run_dir)
@@ -752,6 +798,7 @@ def main():
                 "locustfile": args.locustfile,
                 "prom_url": args.prom_url,
                 "energy_source": args.energy_source,
+                "power_meter": build_power_meter_config(args),
                 "count": args.count,
                 "workload_levels": workload_levels,
                 "runs": [],
@@ -818,6 +865,7 @@ def main():
                     if workload_level.get("duration") is not None:
                         run_experiment_cmd.extend(["--duration", str(workload_level["duration"])])
                     append_deployment_overrides(run_experiment_cmd, args)
+                    append_power_meter_overrides(run_experiment_cmd, args)
 
                     completed = run_step(run_experiment_cmd, "Running experiment")
                     run_dir = extract_run_dir(completed.stderr or completed.stdout)
@@ -888,6 +936,7 @@ def main():
                     str(iteration_dir),
                 ]
                 append_deployment_overrides(run_experiment_cmd, args)
+                append_power_meter_overrides(run_experiment_cmd, args)
                 completed = run_step(run_experiment_cmd, "Running experiment")
                 run_dir = extract_run_dir(completed.stderr or completed.stdout)
                 created_runs.append(run_dir)

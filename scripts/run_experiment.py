@@ -29,6 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 MANAGE_SUT_SCRIPT = Path(__file__).resolve().parent / "manage_sut.py"
+POWER_METER_SAMPLER_SCRIPT = Path(__file__).resolve().parent / "sample_power_meter.py"
 
 
 def load_workload(workload_path):
@@ -222,6 +223,7 @@ def save_metadata(
     timestamps,
     ramp_exclusion_seconds,
     locust_artifacts,
+    power_meter=None,
     workload_label=None,
     experiment_status="success",
     locust_exit_code=None,
@@ -245,6 +247,8 @@ def save_metadata(
             "workload_end": timestamps['workload_end']
         }
     }
+    if power_meter is not None:
+        metadata["power_meter"] = power_meter
     
     metadata_file = runs_dir / "metadata.json"
     with open(metadata_file, 'w') as f:
@@ -332,6 +336,22 @@ def main():
         default=[],
         help="Resource kind to exclude from apply/delete (can be repeated)"
     )
+    parser.add_argument(
+        "--power-meter-url",
+        help="Optional physical power meter API URL for CSV sampling"
+    )
+    parser.add_argument(
+        "--power-meter-interval-seconds",
+        type=float,
+        default=5.0,
+        help="Interval between physical power meter samples in seconds (default: 5)"
+    )
+    parser.add_argument(
+        "--power-meter-request-timeout-seconds",
+        type=float,
+        default=5.0,
+        help="HTTP timeout for each physical power meter sample request (default: 5)"
+    )
     
     args = parser.parse_args()
     
@@ -406,6 +426,8 @@ def main():
         runs_dir = None
         locust_csv_prefix = None
         locust_artifacts = {}
+        power_meter_artifacts = None
+        power_meter_process = None
         if not args.no_results:
             runs_dir = prepare_run_directory(args.run_dir)
             locust_csv_prefix = runs_dir / "locust"
@@ -415,6 +437,37 @@ def main():
                 "failures_csv": str(runs_dir / "locust_failures.csv"),
                 "exceptions_csv": str(runs_dir / "locust_exceptions.csv"),
             }
+            if args.power_meter_url:
+                power_meter_artifacts = {
+                    "enabled": True,
+                    "url": args.power_meter_url,
+                    "interval_seconds": args.power_meter_interval_seconds,
+                    "request_timeout_seconds": args.power_meter_request_timeout_seconds,
+                    "samples_csv": str(runs_dir / "physical_power_meter.csv"),
+                }
+                power_meter_cmd = [
+                    sys.executable,
+                    str(POWER_METER_SAMPLER_SCRIPT),
+                    "--url",
+                    args.power_meter_url,
+                    "--output",
+                    power_meter_artifacts["samples_csv"],
+                    "--interval-seconds",
+                    str(args.power_meter_interval_seconds),
+                    "--request-timeout-seconds",
+                    str(args.power_meter_request_timeout_seconds),
+                ]
+                logger.info("Starting physical power meter sampler")
+                power_meter_process = subprocess.Popen(
+                    power_meter_cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                power_meter_artifacts["pid"] = power_meter_process.pid
+        elif args.power_meter_url:
+            logger.warning(
+                "--power-meter-url was provided but no-results is enabled; skipping power meter sampling"
+            )
 
         # Record workload start
         workload_start_dt = datetime.now()
@@ -431,6 +484,27 @@ def main():
             locust_error = str(exc)
             locust_exit_code = exc.returncode
             logger.error(f"Locust workload failed: {exc}", exc_info=True)
+
+        if power_meter_process is not None:
+            logger.info("Stopping physical power meter sampler")
+            power_meter_process.terminate()
+            try:
+                power_meter_exit_code = power_meter_process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                logger.warning("Power meter sampler did not exit cleanly; killing it")
+                power_meter_process.kill()
+                power_meter_exit_code = power_meter_process.wait(timeout=10)
+            if power_meter_artifacts is not None:
+                power_meter_artifacts["exit_code"] = power_meter_exit_code
+                samples_csv = Path(power_meter_artifacts["samples_csv"])
+                if samples_csv.exists():
+                    with samples_csv.open("r", encoding="utf-8") as infile:
+                        power_meter_artifacts["sample_count"] = max(0, sum(1 for _ in infile) - 1)
+            if power_meter_exit_code not in (0, None):
+                logger.warning(
+                    "Physical power meter sampler exited with code %s",
+                    power_meter_exit_code,
+                )
         
         # Record workload end
         timestamps['workload_end'] = datetime.now().isoformat()
@@ -455,6 +529,7 @@ def main():
                 timestamps,
                 ramp_exclusion_seconds,
                 locust_artifacts,
+                power_meter=power_meter_artifacts,
                 workload_label=args.workload_label,
                 experiment_status="failed" if locust_error else "success",
                 locust_exit_code=locust_exit_code,
