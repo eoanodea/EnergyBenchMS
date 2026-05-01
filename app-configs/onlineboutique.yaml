@@ -10,7 +10,7 @@ resource_overrides:
         ports:
           - port: 80
             targetPort: 8080
-            nodePort: 30314
+            nodePort: 30427
 
 exclude_resource_patterns:
   - "(^|/)loadgenerator($|[-/])"
