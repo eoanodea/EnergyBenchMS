@@ -50,6 +50,55 @@ def deployment_exists(name, namespace):
     return completed.returncode == 0
 
 
+def namespace_exists(namespace):
+    """Return true if a namespace currently exists."""
+    if not namespace:
+        return False
+
+    completed = subprocess.run(
+        ["kubectl", "get", "namespace", namespace],
+        capture_output=True,
+        text=True,
+    )
+    return completed.returncode == 0
+
+
+def ensure_namespace_exists(namespace):
+    """Create the namespace if it does not already exist."""
+    if not namespace:
+        return
+
+    if namespace_exists(namespace):
+        return
+
+    print(f"Creating namespace {namespace}")
+    run_command(["kubectl", "create", "namespace", namespace])
+
+
+def delete_namespace(namespace):
+    """Delete the namespace if provided."""
+    if not namespace:
+        return
+    print(f"Deleting namespace {namespace}")
+    # Use --ignore-not-found to avoid errors when namespace is already removed
+    run_command(["kubectl", "delete", "namespace", namespace, "--ignore-not-found"])
+
+
+def wait_for_namespace_deletion(namespace, timeout_seconds, poll_interval_seconds):
+    """Wait until the namespace no longer exists, or raise on timeout."""
+    if not namespace:
+        return
+
+    deadline = time.time() + timeout_seconds
+    while True:
+        if not namespace_exists(namespace):
+            return
+        if time.time() >= deadline:
+            raise TimeoutError(f"Timed out waiting for namespace to terminate: {namespace}")
+        print(f"Waiting for namespace to terminate: {namespace}")
+        time.sleep(poll_interval_seconds)
+
+
 def write_filtered_manifest_file(manifests):
     """Write selected manifests to a temporary file and return its path."""
     if not manifests:
@@ -91,6 +140,7 @@ def validate_manifest_documents(manifests, manifest_source):
 
 def deploy_app(manifest_file, namespace=None):
     """Deploy application using kubectl apply with a manifest file."""
+    ensure_namespace_exists(namespace)
     command = ["kubectl", "apply", *build_namespace_args(namespace), "-f", str(manifest_file)]
     run_command(command)
 
@@ -312,6 +362,16 @@ def main():
                 args.timeout_seconds,
                 args.poll_interval_seconds,
             )
+            # Attempt to remove the configured namespace after resources have terminated
+            try:
+                delete_namespace(namespace)
+                # Wait for namespace deletion with same timeout and poll interval
+                wait_for_namespace_deletion(namespace, args.timeout_seconds, args.poll_interval_seconds)
+            except TimeoutError:
+                print(f"Namespace {namespace} did not terminate within timeout", file=sys.stderr)
+            except subprocess.CalledProcessError:
+                # run_command will have printed kubectl output; continue
+                pass
             if args.sleep_seconds:
                 print(f"Sleeping for {args.sleep_seconds} seconds after cleanup")
                 time.sleep(args.sleep_seconds)
