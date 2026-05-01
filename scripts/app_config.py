@@ -279,6 +279,64 @@ def apply_image_overrides(manifests, image_overrides):
     return manifests
 
 
+def _deep_merge_patch(target, patch):
+    """Recursively merge a patch mapping into a manifest object."""
+    if not isinstance(target, dict) or not isinstance(patch, dict):
+        return patch
+
+    merged = dict(target)
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge_patch(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def apply_resource_overrides(manifests, resource_overrides):
+    """Apply configured manifest patches to loaded resources."""
+    if not resource_overrides:
+        return manifests
+
+    for override in resource_overrides:
+        if not isinstance(override, dict):
+            raise ValueError("Each resource override must be a mapping")
+
+        kind = str(override.get("kind", "")).strip().lower()
+        name = str(override.get("name", "")).strip()
+        namespace = override.get("namespace")
+        patch = override.get("patch")
+
+        if not kind or not name or not isinstance(patch, dict):
+            raise ValueError(
+                "Resource overrides require kind, name, and a mapping patch"
+            )
+
+        matched = False
+        for index, manifest in enumerate(manifests):
+            if str(manifest.get("kind", "")).strip().lower() != kind:
+                continue
+
+            metadata = manifest.get("metadata", {})
+            if str(metadata.get("name", "")).strip() != name:
+                continue
+
+            manifest_namespace = str(metadata.get("namespace", "")).strip()
+            if namespace is not None and manifest_namespace != str(namespace).strip():
+                continue
+
+            manifests[index] = _deep_merge_patch(manifest, patch)
+            matched = True
+
+        if not matched:
+            location = f"{kind}/{name}"
+            if namespace is not None:
+                location = f"{namespace}/{location}"
+            raise ValueError(f"Resource override did not match any manifest: {location}")
+
+    return manifests
+
+
 def load_and_filter_manifests(
     app_path,
     namespace_override=None,
@@ -319,6 +377,9 @@ def load_and_filter_manifests(
 
     image_overrides = app_config.get("image_overrides")
     filtered_manifests = apply_image_overrides(filtered_manifests, image_overrides)
+
+    resource_overrides = app_config.get("resource_overrides")
+    filtered_manifests = apply_resource_overrides(filtered_manifests, resource_overrides)
 
     deployments = extract_deployments(filtered_manifests, default_namespace=resolved_namespace)
 

@@ -354,6 +354,7 @@ def main():
     )
     
     args = parser.parse_args()
+    logger.info("Invocation argv: %s", sys.argv)
     
     try:
         # Record experiment start
