@@ -293,7 +293,7 @@ def _deep_merge_patch(target, patch):
     return merged
 
 
-def apply_resource_overrides(manifests, resource_overrides):
+def apply_resource_overrides(manifests, resource_overrides, default_namespace=None):
     """Apply configured manifest patches to loaded resources."""
     if not resource_overrides:
         return manifests
@@ -322,7 +322,8 @@ def apply_resource_overrides(manifests, resource_overrides):
                 continue
 
             manifest_namespace = str(metadata.get("namespace", "")).strip()
-            if namespace is not None and manifest_namespace != str(namespace).strip():
+            effective_manifest_namespace = manifest_namespace or str(default_namespace or "").strip()
+            if namespace is not None and effective_manifest_namespace != str(namespace).strip():
                 continue
 
             manifests[index] = _deep_merge_patch(manifest, patch)
@@ -379,7 +380,11 @@ def load_and_filter_manifests(
     filtered_manifests = apply_image_overrides(filtered_manifests, image_overrides)
 
     resource_overrides = app_config.get("resource_overrides")
-    filtered_manifests = apply_resource_overrides(filtered_manifests, resource_overrides)
+    filtered_manifests = apply_resource_overrides(
+        filtered_manifests,
+        resource_overrides,
+        default_namespace=resolved_namespace,
+    )
 
     deployments = extract_deployments(filtered_manifests, default_namespace=resolved_namespace)
 
