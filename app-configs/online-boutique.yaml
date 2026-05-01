@@ -1,4 +1,5 @@
 manifest_path: release/kubernetes-manifests.yaml
+namespace: online-boutique
 
 exclude_resource_patterns:
   - "(^|/)loadgenerator($|[-/])"

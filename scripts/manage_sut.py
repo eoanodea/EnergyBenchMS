@@ -15,10 +15,15 @@ def run_command(command):
     """Run a kubectl command and return its stdout."""
     completed = subprocess.run(
         command,
-        check=True,
         capture_output=True,
         text=True,
     )
+    if completed.returncode != 0:
+        if completed.stdout:
+            print(completed.stdout, end="")
+        if completed.stderr:
+            print(completed.stderr, end="", file=sys.stderr)
+        completed.check_returncode()
     if completed.stdout:
         return completed.stdout.strip()
     return ""
