@@ -861,6 +861,11 @@ def build_html(data):
       <canvas id=\"latencyIterationChart\"></canvas>
     </section>
 
+    <section class=\"card\" style=\"margin-bottom:14px;\">
+      <h2>Energy Comparison over Iterations (Kepler vs Physical Meter)</h2>
+      <canvas id=\"energyComparisonChart\"></canvas>
+    </section>
+
     <div class=\"grid-2\">
       <section class=\"card\">
         <h2>Per-Run CPU (Mean/Max)</h2>
@@ -1003,6 +1008,73 @@ def build_html(data):
           tension: 0.2,
           spanGaps: true,
         }};
+      }});
+
+      return {{ labels, datasets }};
+    }}
+
+    function buildEnergyComparisonSeries(rows) {{
+      const grouped = new Map();
+      rows.forEach((r) => {{
+        const level = r.workload_level || 'unknown';
+        if (!grouped.has(level)) grouped.set(level, []);
+        grouped.get(level).push(r);
+      }});
+
+      const levels = sortLevels(Array.from(grouped.keys()));
+      let maxLen = 0;
+      const orderedRowsByLevel = levels.map((level) => {{
+        const ordered = [...(grouped.get(level) || [])].sort((a, b) => {{
+          const ia = extractIterationIndex(a.name);
+          const ib = extractIterationIndex(b.name);
+          return String(ia).localeCompare(String(ib));
+        }});
+        if (ordered.length > maxLen) maxLen = ordered.length;
+        return {{ level, rows: ordered }};
+      }});
+
+      const labels = Array.from({{ length: maxLen }}, (_, idx) => `iter-${{idx + 1}}`);
+      const datasets = [];
+
+      orderedRowsByLevel.forEach((entry, levelIdx) => {{
+        const keplerData = labels.map((_, i) => {{
+          const row = entry.rows[i];
+          if (!row || typeof row.energy_total !== 'number' || Number.isNaN(row.energy_total)) return null;
+          return row.energy_total;
+        }});
+        const meterData = labels.map((_, i) => {{
+          const row = entry.rows[i];
+          if (!row || typeof row.meter_energy_delta !== 'number' || Number.isNaN(row.meter_energy_delta)) return null;
+          return row.meter_energy_delta;
+        }});
+
+        const hasKeplerData = keplerData.some((v) => v !== null);
+        const hasMeterData = meterData.some((v) => v !== null);
+
+        if (hasKeplerData) {{
+          datasets.push({{
+            label: `${{entry.level}} - Kepler energy (Wh)`,
+            data: keplerData,
+            borderColor: '#116466',
+            backgroundColor: '#11646655',
+            tension: 0.2,
+            spanGaps: true,
+            borderWidth: 2,
+          }});
+        }}
+
+        if (hasMeterData) {{
+          datasets.push({{
+            label: `${{entry.level}} - Meter energy (Wh)`,
+            data: meterData,
+            borderColor: '#b85c38',
+            backgroundColor: '#b85c3855',
+            tension: 0.2,
+            spanGaps: true,
+            borderWidth: 2,
+            borderDash: [5, 5],
+          }});
+        }}
       }});
 
       return {{ labels, datasets }};
@@ -1151,6 +1223,15 @@ def build_html(data):
       options: commonOptions,
     }});
 
+    const energyComparisonChart = new Chart(document.getElementById('energyComparisonChart'), {{
+      type: 'line',
+      data: {{
+        labels: [],
+        datasets: [],
+      }},
+      options: commonOptions,
+    }});
+
     const perRunCpuChart = new Chart(document.getElementById('perRunCpuChart'), {{
       type: 'line',
       data: {{
@@ -1240,6 +1321,11 @@ def build_html(data):
       latencyIterationChart.data.labels = latencySeries.labels;
       latencyIterationChart.data.datasets = latencySeries.datasets;
       latencyIterationChart.update();
+
+      const energySeries = buildEnergyComparisonSeries(rows);
+      energyComparisonChart.data.labels = energySeries.labels;
+      energyComparisonChart.data.datasets = energySeries.datasets;
+      energyComparisonChart.update();
     }}
 
     function renderRunSelector() {{

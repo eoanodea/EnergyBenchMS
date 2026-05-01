@@ -19,8 +19,8 @@ python scripts/run_experiment.py \
   --app apps/simple-web \
   --workload workloads/simple-web.yaml \
   --locustfile apps/simple-web/locustfile.py \
-  --power-meter-url http://192.168.0.100/rpc/Switch.GetStatus?id=0 \
-  --power-meter-interval-seconds 5
+  --power-meter-url http://192.168.0.105/rpc/Switch.GetStatus?id=0 \
+  --power-meter-interval-seconds 1
 ```
 
 To compile the results, you can use the following command:
@@ -47,13 +47,15 @@ To run the same experiment multiple times, query each run, summarise each run, a
 
 ```bash
 python scripts/run_pipeline.py \
-  --count 5 \
+  --count 3 \
   --app apps/simple-web \
   --workload workloads/simple-web.yaml \
   --locustfile apps/simple-web/locustfile.py \
   --cooldown-seconds 60 \
   --energy-source auto \
-  --prom-url http://192.168.0.100:9090
+  --prom-url http://192.168.0.100:9090 \
+  --power-meter-url http://192.168.0.105/rpc/Switch.GetStatus?id=0 \
+  --power-meter-interval-seconds 1
 ```
 
 If you pass `--power-meter-url` to `run_pipeline.py`, it is forwarded to the measured runs only. Warmup runs remain unchanged, and users who omit the flag get the current behavior.
