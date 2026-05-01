@@ -3,6 +3,7 @@
 
 import argparse
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -64,6 +65,28 @@ def write_filtered_manifest_file(manifests):
     ) as outfile:
         yaml.safe_dump_all(manifests, outfile, explicit_start=True, sort_keys=False)
         return Path(outfile.name)
+
+
+def validate_manifest_documents(manifests, manifest_source):
+    """Ensure every loaded manifest has the minimum Kubernetes object fields."""
+    invalid = []
+    for index, manifest in enumerate(manifests, start=1):
+        missing = []
+        if not manifest.get("apiVersion"):
+            missing.append("apiVersion")
+        if not manifest.get("kind"):
+            missing.append("kind")
+        if missing:
+            metadata = manifest.get("metadata", {}) if isinstance(manifest, dict) else {}
+            name = metadata.get("name")
+            location = f"document {index}"
+            if name:
+                location = f"document {index} ({name})"
+            invalid.append(f"{location}: missing {', '.join(missing)}")
+
+    if invalid:
+        details = "; ".join(invalid)
+        raise ValueError(f"Invalid manifest documents in {manifest_source}: {details}")
 
 
 def deploy_app(manifest_file, namespace=None):
@@ -169,6 +192,7 @@ def load_filtered_sut(
         exclude_kinds=exclude_kinds,
     )
 
+    validate_manifest_documents(filtered_manifests, manifest_source)
     manifest_file = write_filtered_manifest_file(filtered_manifests)
     return manifest_source, namespace, deployments, manifest_file
 
