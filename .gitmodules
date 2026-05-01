@@ -1,3 +1,6 @@
 [submodule "apps/sockshop"]
 	path = apps/sockshop
 	url = git@github.com:microservices-demo/microservices-demo.git
+[submodule "apps/onlineboutique"]
+	path = apps/onlineboutique
+	url = git@github.com:GoogleCloudPlatform/microservices-demo.git

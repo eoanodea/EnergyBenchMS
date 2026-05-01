@@ -1,0 +1,8 @@
+manifest_path: release/kubernetes-manifests.yaml
+
+exclude_resource_patterns:
+  - "(^|/)loadgenerator($|[-/])"
+  - "(^|/)prometheus($|[-/])"
+  - "(^|/)grafana($|[-/])"
+  - "(^|/)jaeger($|[-/])"
+  - "(^|/)zipkin($|[-/])"
