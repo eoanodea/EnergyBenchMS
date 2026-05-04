@@ -78,6 +78,12 @@ def append_power_meter_overrides(command, args):
         ])
 
 
+def append_baseline_override(command, args):
+    """Append baseline capture duration for run_experiment invocations."""
+    if args.baseline_seconds is not None:
+        command.extend(["--baseline-seconds", str(args.baseline_seconds)])
+
+
 def build_power_meter_config(args):
     """Create a serializable power meter config block when enabled."""
     if not args.power_meter_url:
@@ -88,6 +94,7 @@ def build_power_meter_config(args):
         "url": args.power_meter_url,
         "interval_seconds": args.power_meter_interval_seconds,
         "request_timeout_seconds": args.power_meter_request_timeout_seconds,
+        "baseline_seconds": args.baseline_seconds,
     }
 
 
@@ -521,6 +528,12 @@ def build_parser():
         help="HTTP timeout for each physical power meter sample request (default: 5)",
     )
     parser.add_argument(
+        "--baseline-seconds",
+        type=int,
+        default=20,
+        help="Seconds to record baseline samples before workload starts (default: 20)",
+    )
+    parser.add_argument(
         "--cooldown-seconds",
         type=int,
         default=0,
@@ -641,6 +654,8 @@ def main():
         raise SystemExit("--count must be at least 1")
     if args.cooldown_seconds < 0:
         raise SystemExit("--cooldown-seconds must be at least 0")
+    if args.baseline_seconds < 0:
+        raise SystemExit("--baseline-seconds must be at least 0")
 
     sut_name = read_sut_name(
         args.app,
@@ -667,6 +682,7 @@ def main():
             args.locustfile,
             "--no-results",
         ]
+        append_baseline_override(warmup_cmd, args)
         append_deployment_overrides(warmup_cmd, args)
         run_step(warmup_cmd, "Running warmup")
 
@@ -721,6 +737,7 @@ def main():
                 "--ramp-exclusion-seconds",
                 str(saturation["ramp_exclusion_seconds"]),
             ]
+            append_baseline_override(run_experiment_cmd, args)
             append_deployment_overrides(run_experiment_cmd, args)
             append_power_meter_overrides(run_experiment_cmd, args)
             completed = run_step(run_experiment_cmd, "Running saturation level")
@@ -829,6 +846,7 @@ def main():
                     "--workload-label",
                     workload_label,
                 ]
+                append_baseline_override(warmup_cmd, args)
                 if workload_level.get("spawn_rate") is not None:
                     warmup_cmd.extend(["--spawn-rate", str(workload_level["spawn_rate"])])
                 if workload_level.get("duration") is not None:
@@ -860,6 +878,7 @@ def main():
                         "--workload-label",
                         workload_label,
                     ]
+                    append_baseline_override(run_experiment_cmd, args)
                     if workload_level.get("spawn_rate") is not None:
                         run_experiment_cmd.extend(["--spawn-rate", str(workload_level["spawn_rate"])])
                     if workload_level.get("duration") is not None:
@@ -916,6 +935,7 @@ def main():
                 args.locustfile,
                 "--no-results",
             ]
+            append_baseline_override(warmup_cmd, args)
             append_deployment_overrides(warmup_cmd, args)
             run_step(warmup_cmd, "Running warmup")
             manage_sut_down(args.app, args.cooldown_seconds, args)
@@ -935,6 +955,7 @@ def main():
                     "--run-dir",
                     str(iteration_dir),
                 ]
+                append_baseline_override(run_experiment_cmd, args)
                 append_deployment_overrides(run_experiment_cmd, args)
                 append_power_meter_overrides(run_experiment_cmd, args)
                 completed = run_step(run_experiment_cmd, "Running experiment")
