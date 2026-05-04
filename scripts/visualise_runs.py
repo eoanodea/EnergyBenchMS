@@ -54,6 +54,12 @@ def parse_float(value):
         return None
 
 
+def joules_to_wh(value):
+  if not isinstance(value, (int, float)):
+    return None
+  return float(value) / 3600.0
+
+
 def parse_duration_seconds(metadata):
     if not metadata:
         return None
@@ -426,10 +432,15 @@ def build_run_row(item, sut_container):
     meter_sample_count = meter_summary.get("sample_count") if isinstance(meter_summary, dict) else None
     meter_error_count = meter_summary.get("error_count") if isinstance(meter_summary, dict) else None
     meter_power_mean = meter_power_stats.get("mean") if isinstance(meter_power_stats, dict) else None
+    meter_baseline_energy_joules = None
     meter_raw_energy_joules = meter_summary.get("raw_energy_delta_joules") if isinstance(meter_summary, dict) else None
     meter_corrected_energy_joules = meter_summary.get("baseline_corrected_workload_energy_joules") if isinstance(meter_summary, dict) else None
     meter_energy_per_request_joules = meter_summary.get("meter_energy_per_request_joules") if isinstance(meter_summary, dict) else None
     meter_quality_flags = meter_summary.get("quality_flags", []) if isinstance(meter_summary, dict) else []
+    meter_raw_energy_wh = joules_to_wh(meter_raw_energy_joules)
+    meter_baseline_energy_wh = None
+    meter_corrected_energy_wh = joules_to_wh(meter_corrected_energy_joules)
+    meter_energy_per_request_wh = joules_to_wh(meter_energy_per_request_joules)
 
     if throughput_mean is None:
         throughput_mean = locust_stats.get("throughput_mean_rps")
@@ -443,6 +454,10 @@ def build_run_row(item, sut_container):
     duration_seconds = parse_duration_seconds(metadata)
     users, configured_duration = infer_users_duration(metadata)
     workload_level = infer_workload_level(run_name, metadata)
+
+    if isinstance(meter_power_mean, (int, float)) and isinstance(duration_seconds, (int, float)):
+      meter_baseline_energy_joules = meter_power_mean * duration_seconds
+      meter_baseline_energy_wh = joules_to_wh(meter_baseline_energy_joules)
 
     cooldown_seconds = None
     saturation = metadata.get("workload_parameters", {}).get("saturation", {})
@@ -487,14 +502,14 @@ def build_run_row(item, sut_container):
         flags.append("error_rate>0")
 
     if users not in (None, 0) and isinstance(throughput_mean, (int, float)) and throughput_mean > 0:
-        if cpu_mean is None or cpu_mean <= 0:
-            flags.append("cpu_missing_or_zero")
-        if energy_total is None or energy_total <= 0:
-            flags.append("energy_missing_or_zero")
+      if cpu_mean is None or cpu_mean <= 0:
+        flags.append("cpu_missing_or_zero")
+      if energy_total is None or energy_total <= 0:
+        flags.append("energy_missing_or_zero")
 
     meter_enabled = bool((metadata.get("power_meter") or {}).get("url"))
     if meter_enabled and not isinstance(meter_corrected_energy_joules, (int, float)):
-        flags.append("power_meter_missing")
+      flags.append("power_meter_missing")
     for meter_flag in meter_quality_flags:
       if meter_flag:
         flags.append(str(meter_flag))
@@ -518,9 +533,14 @@ def build_run_row(item, sut_container):
         "meter_sample_count": meter_sample_count,
         "meter_error_count": meter_error_count,
         "meter_power_mean": meter_power_mean,
+        "meter_baseline_energy_joules": meter_baseline_energy_joules,
+        "meter_baseline_energy_wh": meter_baseline_energy_wh,
         "meter_raw_energy_joules": meter_raw_energy_joules,
+        "meter_raw_energy_wh": meter_raw_energy_wh,
         "meter_corrected_energy_joules": meter_corrected_energy_joules,
+        "meter_corrected_energy_wh": meter_corrected_energy_wh,
         "meter_energy_per_request_joules": meter_energy_per_request_joules,
+        "meter_energy_per_request_wh": meter_energy_per_request_wh,
         "flags": flags,
     }
 
@@ -555,20 +575,36 @@ def compute_level_aggregates(run_rows):
             {
                 "workload_level": level,
                 "run_count": len(rows),
-                "energy_per_request_mean": safe_mean([r.get("energy_per_request") for r in rows]),
-                "energy_per_request_std": safe_stdev([r.get("energy_per_request") for r in rows]),
+          "energy_per_request_mean": safe_mean([r.get("energy_per_request") for r in rows]),
+          "energy_per_request_std": safe_stdev([r.get("energy_per_request") for r in rows]),
                 "throughput_mean": safe_mean([r.get("throughput_mean") for r in rows]),
                 "throughput_std": safe_stdev([r.get("throughput_mean") for r in rows]),
                 "p95_latency_mean": safe_mean([r.get("p95_latency") for r in rows]),
                 "p95_latency_std": safe_stdev([r.get("p95_latency") for r in rows]),
                 "cpu_mean_mean": safe_mean([r.get("cpu_mean") for r in rows]),
                 "cpu_mean_std": safe_stdev([r.get("cpu_mean") for r in rows]),
-                "energy_total_mean": safe_mean([r.get("energy_total") for r in rows]),
-                "energy_total_std": safe_stdev([r.get("energy_total") for r in rows]),
-            "meter_power_mean": safe_mean([r.get("meter_power_mean") for r in rows]),
-            "meter_power_std": safe_stdev([r.get("meter_power_mean") for r in rows]),
-            "meter_energy_delta_mean": safe_mean([r.get("meter_energy_delta") for r in rows]),
-            "meter_energy_delta_std": safe_stdev([r.get("meter_energy_delta") for r in rows]),
+          "energy_total_mean": safe_mean([r.get("energy_total") for r in rows]),
+          "energy_total_std": safe_stdev([r.get("energy_total") for r in rows]),
+          "meter_power_mean": safe_mean([r.get("meter_power_mean") for r in rows]),
+          "meter_power_std": safe_stdev([r.get("meter_power_mean") for r in rows]),
+          "meter_corrected_energy_wh_mean": safe_mean([r.get("meter_corrected_energy_wh") for r in rows]),
+          "meter_corrected_energy_wh_std": safe_stdev([r.get("meter_corrected_energy_wh") for r in rows]),
+          "display_energy_total_mean": safe_mean([
+            r.get("meter_corrected_energy_wh") if isinstance(r.get("meter_corrected_energy_wh"), (int, float)) else r.get("energy_total")
+            for r in rows
+          ]),
+          "display_energy_total_std": safe_stdev([
+            r.get("meter_corrected_energy_wh") if isinstance(r.get("meter_corrected_energy_wh"), (int, float)) else r.get("energy_total")
+            for r in rows
+          ]),
+          "display_energy_per_request_mean": safe_mean([
+            r.get("meter_energy_per_request_wh") if isinstance(r.get("meter_energy_per_request_wh"), (int, float)) else r.get("energy_per_request")
+            for r in rows
+          ]),
+          "display_energy_per_request_std": safe_stdev([
+            r.get("meter_energy_per_request_wh") if isinstance(r.get("meter_energy_per_request_wh"), (int, float)) else r.get("energy_per_request")
+            for r in rows
+          ]),
             }
         )
 
@@ -958,6 +994,11 @@ def build_html(data):
       return Math.sqrt(variance);
     }}
 
+    function joulesToWh(value) {{
+      if (typeof value !== 'number' || Number.isNaN(value)) return null;
+      return value / 3600.0;
+    }}
+
     function computeLevelAggregates(rows) {{
       const grouped = new Map();
       rows.forEach((r) => {{
@@ -983,6 +1024,8 @@ def build_html(data):
           cpu_mean_std: computeStdev(metricValues('cpu_mean')),
           energy_total_mean: computeMean(metricValues('energy_total')),
           energy_total_std: computeStdev(metricValues('energy_total')),
+          energy_per_request_wh_mean: computeMean(metricValues('energy_per_request').map(joulesToWh)),
+          energy_per_request_wh_std: computeStdev(metricValues('energy_per_request').map(joulesToWh)),
         }};
       }});
     }}
@@ -1128,9 +1171,15 @@ def build_html(data):
           if (!row || typeof row.energy_total !== 'number' || Number.isNaN(row.energy_total)) return null;
           return row.energy_total;
         }});
+        const baselineData = labels.map((_, i) => {{
+          const row = entry.rows[i];
+          const value = row ? row.meter_baseline_energy_wh : null;
+          if (typeof value !== 'number' || Number.isNaN(value)) return null;
+          return value;
+        }});
         const meterData = labels.map((_, i) => {{
           const row = entry.rows[i];
-          const corrected = row ? row.meter_corrected_energy_joules : null;
+          const corrected = row ? row.meter_corrected_energy_wh : null;
           const legacy = row ? row.meter_energy_delta : null;
           const value = (typeof corrected === 'number' && !Number.isNaN(corrected)) ? corrected : legacy;
           if (typeof value !== 'number' || Number.isNaN(value)) return null;
@@ -1138,6 +1187,7 @@ def build_html(data):
         }});
 
         const hasKeplerData = keplerData.some((v) => v !== null);
+        const hasBaselineData = baselineData.some((v) => v !== null);
         const hasMeterData = meterData.some((v) => v !== null);
 
         if (hasKeplerData) {{
@@ -1149,6 +1199,19 @@ def build_html(data):
             tension: 0.2,
             spanGaps: true,
             borderWidth: 2,
+          }});
+        }}
+
+        if (hasBaselineData) {{
+          datasets.push({{
+            label: `${{entry.level}} - Baseline energy (Wh)`,
+            data: baselineData,
+            borderColor: '#556b2f',
+            backgroundColor: '#556b2f55',
+            tension: 0.2,
+            spanGaps: true,
+            borderWidth: 2,
+            borderDash: [2, 4],
           }});
         }}
 
@@ -1177,8 +1240,12 @@ def build_html(data):
         const values = (grouped.get(level) || []).map((row) => row.energy_total);
         return computeMean(values);
       }});
+      const baselineData = levels.map((level) => {{
+        const values = (grouped.get(level) || []).map((row) => row.meter_baseline_energy_wh);
+        return computeMean(values);
+      }});
       const meterData = levels.map((level) => {{
-        const values = (grouped.get(level) || []).map((row) => row.meter_energy_delta);
+        const values = (grouped.get(level) || []).map((row) => row.meter_corrected_energy_wh);
         return computeMean(values);
       }});
 
@@ -1192,6 +1259,18 @@ def build_html(data):
           tension: 0.2,
           spanGaps: true,
           borderWidth: 2,
+        }});
+      }}
+      if (baselineData.some((value) => value !== null)) {{
+        datasets.push({{
+          label: 'Baseline energy (Wh)',
+          data: baselineData,
+          borderColor: '#556b2f',
+          backgroundColor: '#556b2f55',
+          tension: 0.2,
+          spanGaps: true,
+          borderWidth: 2,
+          borderDash: [2, 4],
         }});
       }}
       if (meterData.some((value) => value !== null)) {{
@@ -1272,9 +1351,9 @@ def build_html(data):
           formatMaybeNumber(r.energy_per_request, 9),
           r.meter_sample_count ?? '-',
           formatMaybeNumber(r.meter_power_mean, 6),
-          formatMaybeNumber(r.meter_raw_energy_joules, 6),
-          formatMaybeNumber(r.meter_corrected_energy_joules, 6),
-          formatMaybeNumber(r.meter_energy_per_request_joules, 9),
+          formatMaybeNumber(r.meter_raw_energy_wh, 6),
+          formatMaybeNumber(r.meter_corrected_energy_wh, 6),
+          formatMaybeNumber(r.meter_energy_per_request_wh, 9),
           r.meter_error_count ?? '-',
           (r.flags || []).join(' | ') || '-',
         ];
@@ -1299,7 +1378,7 @@ def build_html(data):
         const cells = [
           row.workload_level,
           String(row.run_count),
-          formatMeanStd(row.energy_per_request_mean, row.energy_per_request_std, 9),
+          formatMeanStd(row.display_energy_per_request_mean, row.display_energy_per_request_std, 9),
           formatMeanStd(row.throughput_mean, row.throughput_std, 4),
           formatMeanStd(row.p95_latency_mean, row.p95_latency_std, 4),
           formatMeanStd(row.cpu_mean_mean, row.cpu_mean_std, 6),
@@ -1340,7 +1419,7 @@ def build_html(data):
       }});
     }}
 
-    const chartEnergyPerRequest = buildBarChart('chartEnergyPerRequest', 'energy_per_request mean', '#116466');
+    const chartEnergyPerRequest = buildBarChart('chartEnergyPerRequest', 'Kepler energy / request (Wh)', '#116466');
     const chartEnergyTotal = buildBarChart('chartEnergyTotal', 'energy_total mean', '#b85c38');
     const chartThroughput = buildBarChart('chartThroughput', 'throughput mean', '#2f3e46');
     const chartP95 = buildBarChart('chartP95', 'p95 latency mean', '#8a2d3b');
@@ -1394,10 +1473,17 @@ def build_html(data):
         labels: [],
         datasets: [
           {{
-            label: 'energy total',
+            label: 'kepler energy total',
             data: [],
             borderColor: '#2f3e46',
             backgroundColor: 'rgba(47,62,70,0.2)',
+            tension: 0.2,
+          }},
+          {{
+            label: 'meter corrected energy total',
+            data: [],
+            borderColor: '#b85c38',
+            backgroundColor: 'rgba(184,92,56,0.2)',
             tension: 0.2,
           }},
           {{
@@ -1416,11 +1502,32 @@ def build_html(data):
       const labels = levelRows.map((r) => r.workload_level);
 
       chartEnergyPerRequest.data.labels = labels;
-      chartEnergyPerRequest.data.datasets[0].data = levelRows.map((r) => r.energy_per_request_mean);
+      chartEnergyPerRequest.data.datasets[0].data = levelRows.map((r) => r.energy_per_request_wh_mean);
+      chartEnergyPerRequest.data.datasets[0].label = 'Kepler energy / request (Wh)';
+      if (chartEnergyPerRequest.data.datasets.length < 2) {{
+        chartEnergyPerRequest.data.datasets.push({{
+          label: 'Meter energy / request (Wh)',
+          data: [],
+          borderColor: '#b85c38',
+          backgroundColor: '#b85c3855',
+          borderWidth: 1,
+        }});
+      }}
+      chartEnergyPerRequest.data.datasets[1].data = levelRows.map((r) => r.display_energy_per_request_mean);
       chartEnergyPerRequest.update();
 
       chartEnergyTotal.data.labels = labels;
-      chartEnergyTotal.data.datasets[0].data = levelRows.map((r) => r.energy_total_mean);
+      chartEnergyTotal.data.datasets[0].data = levelRows.map((r) => r.display_energy_total_mean);
+      if (chartEnergyTotal.data.datasets.length < 2) {{
+        chartEnergyTotal.data.datasets.push({{
+          label: 'meter corrected energy mean',
+          data: [],
+          borderColor: '#b85c38',
+          backgroundColor: '#b85c3855',
+          borderWidth: 1,
+        }});
+      }}
+      chartEnergyTotal.data.datasets[1].data = levelRows.map((r) => r.meter_corrected_energy_wh_mean);
       chartEnergyTotal.update();
 
       chartThroughput.data.labels = labels;
@@ -1455,7 +1562,8 @@ def build_html(data):
 
       perRunEnergyChart.data.labels = labels;
       perRunEnergyChart.data.datasets[0].data = rows.map((r) => r.energy_total);
-      perRunEnergyChart.data.datasets[1].data = rows.map((r) => r.energy_per_request);
+      perRunEnergyChart.data.datasets[1].data = rows.map((r) => r.meter_corrected_energy_wh);
+      perRunEnergyChart.data.datasets[2].data = rows.map((r) => r.energy_per_request);
       perRunEnergyChart.update();
 
       const latencySeries = chartAxisMode === 'levels' ? buildLatencyLevelSeries(rows) : buildLatencyIterationSeries(rows);

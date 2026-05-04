@@ -1,49 +1,75 @@
-## How to use
+## Setup
 
-To install the required dependencies, you can use the following command:
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-To run an experiment, you can use the following command:
+## Single experiment run
+
+Run one experiment:
 
 ```bash
-python scripts/run_experiment.py --app apps/simple-web --workload workloads/simple-web.yaml --locustfile apps/simple-web/locustfile.py
+python scripts/run_experiment.py \
+  --app apps/simple-web \
+  --workload workloads/simple-web.yaml \
+  --locustfile apps/simple-web/locustfile.py
 ```
 
-If you have a physical power meter on the network, you can sample it during the measured run with:
+Useful optional flags:
+
+- `--ramp-exclusion-seconds`: excludes initial workload seconds from downstream summary windows
+- `--baseline-seconds`: captures baseline power before workload starts (default: `20`)
+
+Run with physical meter sampling:
 
 ```bash
 python scripts/run_experiment.py \
   --app apps/simple-web \
   --workload workloads/simple-web.yaml \
   --locustfile apps/simple-web/locustfile.py \
+  --baseline-seconds 20 \
   --power-meter-url http://192.168.0.105/rpc/Switch.GetStatus?id=0 \
-  --power-meter-interval-seconds 1
+  --power-meter-interval-seconds 1 \
+  --power-meter-request-timeout-seconds 5
 ```
 
-To compile the results, you can use the following command:
+Notes:
+
+- Physical meter data is additive, not a replacement for Prometheus metrics.
+- The meter is treated as the whole-system source; Kepler remains container-level attribution/proxy data.
+
+## Per-run post-processing
+
+Query Prometheus for a run:
 
 ```bash
 python scripts/query_prometheus.py \
-  --run-dir runs/20260413_173747 \
+  --run-dir runs/<run_dir> \
   --prom-url http://192.168.0.100:9090 \
   --energy-source auto
 ```
 
-Supported values for `--energy-source` are: `auto`, `joules`, `bpf_cpu_time`, and `bpf_block_irq`.
-The default `auto` mode prefers joules and falls back to BPF-based metrics when joules are unavailable or zero.
+Supported `--energy-source` values: `auto`, `joules`, `bpf_cpu_time`, `bpf_block_irq`.
+`auto` prefers joules and falls back to BPF metrics when needed.
 
-To summarize the results, you can use the following command:
+Summarize a run:
 
 ```bash
-python scripts/summarise_run.py --run-dir runs/20260413_173747
+python scripts/summarise_run.py --run-dir runs/<run_dir>
 ```
 
-When a physical meter CSV is present, `summarise_run.py` adds a `physical_power_meter` block to `summary.json` and extra meter rows to `summary.csv`.
+When `physical_power_meter.csv` is present, the summary includes a `physical_power_meter` block with:
 
-To run the same experiment multiple times, query each run, summarise each run, and generate the comparison dashboard:
+- raw meter delta
+- baseline-corrected workload energy
+- meter energy per request
+- baseline/quality flags
+
+## Batch pipeline
+
+Run repeated experiments and generate a comparison dashboard:
 
 ```bash
 python scripts/run_pipeline.py \
@@ -51,6 +77,7 @@ python scripts/run_pipeline.py \
   --app apps/simple-web \
   --workload workloads/simple-web.yaml \
   --locustfile apps/simple-web/locustfile.py \
+  --baseline-seconds 20 \
   --cooldown-seconds 60 \
   --energy-source auto \
   --prom-url http://192.168.0.100:9090 \
@@ -58,19 +85,67 @@ python scripts/run_pipeline.py \
   --power-meter-interval-seconds 1
 ```
 
-If you pass `--power-meter-url` to `run_pipeline.py`, it is forwarded to the measured runs only. Warmup runs remain unchanged, and users who omit the flag get the current behavior.
+Pipeline behavior:
 
-The pipeline performs one warmup run before the measured runs and waits for the configured cooldown after warmup and between each measured run.
-It also creates a batch directory under `runs/` named like `timestamp_sutname`, with measured runs stored as `iteration_timestamp` directories inside it.
+- one warmup run is executed before measured runs
+- cooldown is applied after warmup and between measured runs
+- baseline window is configurable via `--baseline-seconds` and passed to all `run_experiment.py` invocations
+- meter flags are forwarded to measured runs only
 
-## Onboard a new application
+## Multiple workload levels
 
-For apps that do not match the simple `apps/<name>/deployment.yaml` layout (for example, multi-manifest apps), define a deployment config file.
+You can define named workload levels in workload YAML:
+
+```yaml
+workload_levels:
+  - low: 20
+  - medium: 40
+  - high: 60
+```
+
+The pipeline executes `--count` iterations per level and stores them under level-specific folders.
+
+## Saturation mode
+
+Workload YAML example:
+
+```yaml
+saturation:
+  levels: [20, 40, 60, 80, 100]
+  dwell_seconds: 120
+  spawn_rate: 5
+  ramp_exclusion_seconds: 20
+  reset_between_levels: true
+  cooldown_seconds: 30
+```
+
+Run saturation mode:
+
+```bash
+python scripts/run_pipeline.py \
+  --saturation-enabled \
+  --app apps/simple-web \
+  --workload workloads/simple-web.yaml \
+  --locustfile apps/simple-web/locustfile.py \
+  --energy-source auto \
+  --prom-url http://192.168.0.100:9090
+```
+
+Outputs include:
+
+- `saturation_plan.json`
+- `calibration_summary.csv`
+- `saturation_summary.json`
+- one run directory per level iteration
+
+## App onboarding and deployment config
+
+If an app does not use the simple `apps/<name>/deployment.yaml` layout, add a config file.
 
 Supported config locations (priority order):
 
 1. `apps/<app>/pipeline_app.yaml`
-2. `app-configs/<app-name>.yaml` (recommended when `<app>` is a submodule)
+2. `app-configs/<app-name>.yaml`
 3. `app-configs/<relative-app-path>/pipeline_app.yaml`
 
 Example:
@@ -84,209 +159,24 @@ exclude_resource_patterns:
   - "(^|/)load-?test($|[-/])"
 ```
 
-Fields:
-
-- `manifest_path`: path relative to the app directory, can be a file or directory
-- `namespace`: optional namespace override used for deployment readiness
-- `exclude_resource_patterns`: optional regex list for resources to skip during apply/delete
-- `exclude_kinds`: optional list of resource kinds to skip (for example, `ServiceMonitor`)
-
-This config is used by both deploy and SUT lifecycle commands, so excluded resources are consistently skipped in both phases.
-
-You can also add one-off CLI overrides when needed:
+One-off CLI overrides:
 
 - `--manifest-path`
 - `--namespace`
 - `--exclude-resource-pattern` (repeatable)
 - `--exclude-kind` (repeatable)
 
-## Run sockshop from submodule
+## SUT lifecycle helper
 
-This workflow keeps sockshop source as a Git submodule and keeps pipeline config in the main repository at `app-configs/sockshop.yaml`.
-
-### 1. Clone the submodule
-
-If the repository is already cloned:
+Bring the application stack up/down without running workload traffic:
 
 ```bash
-git submodule update --init --recursive apps/sockshop
-```
-
-If cloning from scratch:
-
-```bash
-git clone --recurse-submodules <your-energybench-repo-url>
-cd controller
-```
-
-### 2. Prep for experiment
-
-Install dependencies and verify the app config exists in the main repo:
-
-```bash
-pip install -r requirements.txt
-cat app-configs/sockshop.yaml
-```
-
-Expected `app-configs/sockshop.yaml` content:
-
-```yaml
-manifest_path: deploy/kubernetes/manifests
-namespace: sock-shop
-exclude_resource_patterns:
-  - "(^|/)prometheus($|[-/])"
-  - "(^|/)kepler($|[-/])"
-  - "(^|/)grafana($|[-/])"
-  - "(^|/)jaeger($|[-/])"
-  - "(^|/)alertmanager($|[-/])"
-  - "(^|/)load-?test($|[-/])"
-```
-
-### 3. Execute
-
-Run the standard pipeline command with your provided load assets. No extra deployment flags are needed because `app-configs/sockshop.yaml` is loaded automatically:
-
-```bash
-python scripts/run_pipeline.py \
-  --count 3 \
-  --app apps/sockshop \
-  --workload <path-to-provided-workload-yaml> \
-  --locustfile <path-to-provided-locustfile.py> \
-  --cooldown-seconds 60 \
-  --energy-source auto \
-  --prom-url http://192.168.0.100:9090
-```
-
-If you need temporary overrides for one run, you can still pass `--manifest-path`, `--namespace`, `--exclude-resource-pattern`, and `--exclude-kind`.
-
-## Multiple workload levels
-
-You can also define named workload levels in the workload YAML. This applies to the standard pipeline path and keeps saturation mode separate.
-
-Example:
-
-```yaml
-workload_levels:
-  - low: 20
-  - medium: 40
-  - high: 60
-```
-
-When `workload_levels` is present, `run_pipeline.py` will run `--count` iterations for each named workload level. The output directories will include the workload name, for example:
-
-```text
-runs/<batch>/low/iteration_...
-runs/<batch>/medium/iteration_...
-runs/<batch>/high/iteration_...
-```
-
-Each workload level gets its own warmup before the measured iterations, and the batch manifest records which runs belong to which label.
-
-## Saturation calibration mode (stepwise)
-
-Use saturation mode to run fixed user levels with fixed dwell time and reset/cooldown between levels.
-
-### Default config in workload YAML
-
-The workload file supports a simple saturation section:
-
-```yaml
-saturation:
-  levels: [20, 40, 60, 80, 100]
-  dwell_seconds: 120
-  spawn_rate: 5
-  ramp_exclusion_seconds: 20
-  reset_between_levels: true
-  cooldown_seconds: 30
-```
-
-### Run saturation mode
-
-If values are set in the workload YAML, this is enough:
-
-```bash
-python scripts/run_pipeline.py \
-  --saturation-enabled \
-  --app apps/simple-web \
-  --workload workloads/simple-web.yaml \
-  --locustfile apps/simple-web/locustfile.py \
-  --energy-source auto \
-  --prom-url http://192.168.0.100:9090
-```
-
-CLI `--sat-*` flags are optional overrides for one-off runs.
-
-### Saturation outputs
-
-A saturation batch directory under `runs/` contains:
-
-- `saturation_plan.json`: execution config and run mapping per user level
-- `calibration_summary.csv`: primary calibration dataset (one row per level)
-- `saturation_summary.json`: threshold-based interpretation
-- `level_XXX_iteration_*` directories with full per-level artifacts
-
-Per-level artifacts include:
-
-- Prometheus metrics (`cpu_total.json`, `cpu_k8s_by_id.json`, `energy.json`, ...)
-- Locust exports (`locust_stats.csv`, `locust_stats_history.csv`, failures/exceptions)
-- `metadata.json` with `workload_effective_start` and ramp exclusion metadata
-- `summary.json` and `summary.csv`
-
-### Calibration CSV columns
-
-`calibration_summary.csv` contains:
-
-- `user_level`
-- `throughput_mean`
-- `cpu_mean`
-- `cpu_max`
-- `energy_total`
-- `energy_per_request`
-- `p95_latency`
-- `error_rate`
-
-Definitions used:
-
-- `effective_duration = dwell_seconds - ramp_exclusion_seconds`
-- `energy_total = energy_mean * effective_duration`
-- `energy_per_request = energy_total / successful_requests`
-
-### Saturation analysis thresholds
-
-`saturation_summary.json` is produced by `scripts/saturation_analyse.py` using simple adjacent-level threshold logic:
-
-- Throughput plateau (primary): marginal throughput gain below threshold
-- Degradation (primary): latency jump and/or error-rate threshold
-- CPU threshold (secondary): first level crossing CPU mean threshold
-
-Threshold defaults:
-
-- `--sat-plateau-threshold 0.05`
-- `--sat-latency-jump-threshold 0.30`
-- `--sat-error-rate-threshold 0.01`
-- `--sat-cpu-threshold 0.90`
-
-No smoothing, regressions, or curve fitting are used in this phase.
-
-To bring the application stack up or down without running a workload, use the lifecycle helper:
-
-```bash
-python scripts/manage_sut.py up \
-  --app apps/simple-web
+python scripts/manage_sut.py up --app apps/simple-web
 
 python scripts/manage_sut.py down \
   --app apps/simple-web \
   --sleep-seconds 30
 ```
 
-The `up` command applies only the filtered SUT manifests and waits for the deployments to become ready. The `down` command deletes the same filtered manifests, waits for the matching pods to terminate, and then optionally sleeps.
-
-To clean up only the application stack, you can use the lifecycle helper:
-
-```bash
-python scripts/manage_sut.py down \
-  --app apps/simple-web \
-  --sleep-seconds 30
-```
-
-The cleanup step deletes only the manifests in the application directory, waits for the matching SUT pods to terminate in the app's namespace, and does not touch observability components or other namespaces.
+`up` applies filtered manifests and waits for deployment readiness.
+`down` deletes the same filtered manifests, waits for matching pod termination, then optionally sleeps.
