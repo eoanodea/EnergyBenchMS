@@ -17,6 +17,9 @@ CSV_FIELDNAMES = [
     "sample_index",
     "timestamp_iso",
     "timestamp_unix",
+    "elapsed_seconds",
+    "phase",
+    "baseline_seconds",
     "url",
     "source",
     "output",
@@ -66,12 +69,20 @@ def main():
         default=5.0,
         help="HTTP timeout per sample request in seconds (default: 5)",
     )
+    parser.add_argument(
+        "--baseline-seconds",
+        type=float,
+        default=0.0,
+        help="Seconds to mark as baseline phase before the workload begins (default: 0)",
+    )
     args = parser.parse_args()
 
     if args.interval_seconds <= 0:
         raise SystemExit("--interval-seconds must be greater than 0")
     if args.request_timeout_seconds <= 0:
         raise SystemExit("--request-timeout-seconds must be greater than 0")
+    if args.baseline_seconds < 0:
+        raise SystemExit("--baseline-seconds must be at least 0")
 
     stop_requested = False
 
@@ -86,7 +97,8 @@ def main():
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     sample_index = 0
-    next_sample_at = time.monotonic()
+    sampler_started_at = time.monotonic()
+    next_sample_at = sampler_started_at
 
     with output_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=CSV_FIELDNAMES)
@@ -95,10 +107,15 @@ def main():
 
         while not stop_requested:
             now = datetime.now(timezone.utc)
+            elapsed_seconds = time.monotonic() - sampler_started_at
+            phase = "baseline" if elapsed_seconds < args.baseline_seconds else "workload"
             row = {
                 "sample_index": sample_index,
                 "timestamp_iso": now.isoformat(),
                 "timestamp_unix": now.timestamp(),
+                "elapsed_seconds": elapsed_seconds,
+                "phase": phase,
+                "baseline_seconds": args.baseline_seconds,
                 "url": args.url,
                 "source": "",
                 "output": "",

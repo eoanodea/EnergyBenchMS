@@ -42,6 +42,13 @@ def safe_float(raw_value):
         return None
 
 
+def safe_mean(values):
+    cleaned = [value for value in values if isinstance(value, (int, float))]
+    if not cleaned:
+        return None
+    return sum(cleaned) / len(cleaned)
+
+
 def parse_effective_duration_seconds(metadata):
     timestamps = metadata.get("timestamps", {}) if isinstance(metadata, dict) else {}
     start = timestamps.get("workload_effective_start") or timestamps.get("workload_start")
@@ -217,6 +224,158 @@ def parse_power_meter_samples(run_dir):
     return meter_summary
 
 
+def parse_meter_timestamp(sample_row):
+    timestamp = safe_float(sample_row.get("timestamp_unix"))
+    if isinstance(timestamp, (int, float)):
+        return float(timestamp)
+
+    raw_timestamp = sample_row.get("timestamp_iso")
+    if raw_timestamp in (None, ""):
+        return None
+
+    try:
+        return datetime.fromisoformat(str(raw_timestamp)).timestamp()
+    except ValueError:
+        return None
+
+
+def resolve_meter_window(metadata):
+    timestamps = metadata.get("timestamps", {}) if isinstance(metadata, dict) else {}
+
+    workload_start = timestamps.get("workload_start")
+    workload_effective_start = timestamps.get("workload_effective_start") or workload_start
+    workload_end = timestamps.get("workload_end")
+
+    return {
+        "workload_start": to_unix_seconds(workload_start) if workload_start else None,
+        "workload_effective_start": to_unix_seconds(workload_effective_start) if workload_effective_start else None,
+        "workload_end": to_unix_seconds(workload_end) if workload_end else None,
+    }
+
+
+def classify_meter_sample(sample_row, metadata, meter_window):
+    phase = (sample_row.get("phase") or "").strip().lower()
+    if phase in {"baseline", "workload"}:
+        return phase
+
+    sample_timestamp = parse_meter_timestamp(sample_row)
+    if sample_timestamp is None:
+        return "unknown"
+
+    baseline_seconds = None
+    power_meter_metadata = metadata.get("power_meter", {}) if isinstance(metadata, dict) else {}
+    if isinstance(power_meter_metadata, dict):
+        baseline_seconds = safe_float(power_meter_metadata.get("baseline_seconds"))
+    if baseline_seconds is None and isinstance(metadata, dict):
+        baseline_seconds = safe_float(metadata.get("baseline_seconds"))
+
+    if baseline_seconds is not None:
+        elapsed_seconds = safe_float(sample_row.get("elapsed_seconds"))
+        if elapsed_seconds is not None:
+            return "baseline" if elapsed_seconds < baseline_seconds else "workload"
+
+    workload_start = meter_window.get("workload_start")
+    workload_effective_start = meter_window.get("workload_effective_start")
+    workload_end = meter_window.get("workload_end")
+
+    if workload_start is not None and sample_timestamp < workload_start:
+        return "baseline"
+
+    if (
+        workload_effective_start is not None
+        and workload_end is not None
+        and workload_effective_start <= sample_timestamp <= workload_end
+    ):
+        return "workload"
+
+    return "unknown"
+
+
+def load_physical_meter_samples(run_dir, metadata):
+    raw_rows = load_power_meter_samples(run_dir)
+    meter_window = resolve_meter_window(metadata)
+    parsed_rows = []
+
+    for row in raw_rows:
+        parsed_rows.append(
+            {
+                "timestamp": parse_meter_timestamp(row),
+                "phase": classify_meter_sample(row, metadata, meter_window),
+                "apower": safe_float(row.get("apower")),
+                "aenergy_total": safe_float(row.get("aenergy_total")),
+                "error": (row.get("error") or "").strip(),
+            }
+        )
+
+    parsed_rows.sort(key=lambda item: item["timestamp"] if item["timestamp"] is not None else float("inf"))
+    return parsed_rows
+
+
+def convert_energy_to_joules(value, unit):
+    if not isinstance(value, (int, float)):
+        return None
+
+    normalized_unit = str(unit or "").strip().lower()
+    if normalized_unit == "wh":
+        return float(value) * 3600.0
+    if normalized_unit == "kwh":
+        return float(value) * 3_600_000.0
+    if normalized_unit == "j":
+        return float(value)
+
+    return None
+
+
+def integrate_net_energy_joules(samples, baseline_power_watts, start_timestamp=None, end_timestamp=None):
+    usable_samples = []
+    for sample in samples:
+        timestamp = sample.get("timestamp")
+        power = sample.get("apower")
+        if not isinstance(timestamp, (int, float)) or not isinstance(power, (int, float)):
+            continue
+        if start_timestamp is not None and timestamp < start_timestamp:
+            continue
+        if end_timestamp is not None and timestamp > end_timestamp:
+            continue
+        usable_samples.append(sample)
+
+    if len(usable_samples) < 2 or not isinstance(baseline_power_watts, (int, float)):
+        return None
+
+    energy_joules = 0.0
+    for previous_sample, current_sample in zip(usable_samples, usable_samples[1:]):
+        delta_seconds = current_sample["timestamp"] - previous_sample["timestamp"]
+        if delta_seconds <= 0:
+            continue
+        previous_net_power = previous_sample["apower"] - baseline_power_watts
+        current_net_power = current_sample["apower"] - baseline_power_watts
+        energy_joules += ((previous_net_power + current_net_power) / 2.0) * delta_seconds
+
+    return energy_joules
+
+
+def compute_baseline_drift_ratio(baseline_samples):
+    powers = [sample.get("apower") for sample in baseline_samples if isinstance(sample.get("apower"), (int, float))]
+    if len(powers) < 4:
+        return None
+
+    midpoint = len(powers) // 2
+    first_half = powers[:midpoint]
+    second_half = powers[midpoint:]
+    if not first_half or not second_half:
+        return None
+
+    first_mean = safe_mean(first_half)
+    second_mean = safe_mean(second_half)
+    baseline_mean = safe_mean(powers)
+    if not isinstance(first_mean, (int, float)) or not isinstance(second_mean, (int, float)):
+        return None
+    if not isinstance(baseline_mean, (int, float)) or baseline_mean <= 0:
+        return None
+
+    return abs(second_mean - first_mean) / baseline_mean
+
+
 def parse_locust_workload_metrics(run_dir, min_timestamp=None):
     """Summarise workload metrics from Locust history over the effective window."""
     history_path = Path(run_dir) / "locust_stats_history.csv"
@@ -296,9 +455,66 @@ def build_summary(energy_stats, cpu_k8s_stats, cpu_total_stats, workload_summary
 
 
 def build_physical_power_meter_summary(run_dir, metadata, workload_summary):
-    meter_summary = parse_power_meter_samples(run_dir)
-    if not meter_summary:
+    meter_samples = load_physical_meter_samples(run_dir, metadata)
+    if not meter_samples:
         return None
+
+    meter_window = resolve_meter_window(metadata)
+    workload_start = meter_window.get("workload_start")
+    workload_effective_start = meter_window.get("workload_effective_start")
+    workload_end = meter_window.get("workload_end")
+
+    baseline_samples = [sample for sample in meter_samples if sample.get("phase") == "baseline"]
+    workload_samples = [sample for sample in meter_samples if sample.get("phase") == "workload"]
+
+    # Backward compatibility for older runs that do not have explicit phase tags.
+    if not baseline_samples and workload_start is not None:
+        baseline_samples = [
+            sample
+            for sample in meter_samples
+            if isinstance(sample.get("timestamp"), (int, float)) and sample["timestamp"] < workload_start
+        ]
+
+    if not workload_samples and workload_effective_start is not None and workload_end is not None:
+        workload_samples = [
+            sample
+            for sample in meter_samples
+            if isinstance(sample.get("timestamp"), (int, float))
+            and workload_effective_start <= sample["timestamp"] <= workload_end
+        ]
+
+    power_meter_metadata = metadata.get("power_meter", {}) if isinstance(metadata, dict) else {}
+    meter_energy_unit = None
+    if isinstance(power_meter_metadata, dict):
+        meter_energy_unit = power_meter_metadata.get("energy_unit")
+    if not meter_energy_unit:
+        meter_energy_unit = "Wh"
+
+    unit_unknown = meter_energy_unit not in {"Wh", "kWh", "J"}
+
+    raw_energy_delta_wh = None
+    raw_energy_delta_joules = None
+    energy_samples = [sample for sample in meter_samples if isinstance(sample.get("aenergy_total"), (int, float))]
+    if len(energy_samples) >= 2:
+        raw_energy_delta_wh = energy_samples[-1]["aenergy_total"] - energy_samples[0]["aenergy_total"]
+        raw_energy_delta_joules = convert_energy_to_joules(raw_energy_delta_wh, meter_energy_unit)
+
+    effective_energy_delta_wh = None
+    effective_energy_delta_joules = None
+    effective_energy_samples = [sample for sample in workload_samples if isinstance(sample.get("aenergy_total"), (int, float))]
+    if len(effective_energy_samples) >= 2:
+        effective_energy_delta_wh = effective_energy_samples[-1]["aenergy_total"] - effective_energy_samples[0]["aenergy_total"]
+        effective_energy_delta_joules = convert_energy_to_joules(effective_energy_delta_wh, meter_energy_unit)
+
+    baseline_power_watts = safe_mean([sample.get("apower") for sample in baseline_samples])
+    baseline_drift_ratio = compute_baseline_drift_ratio(baseline_samples)
+
+    baseline_corrected_workload_energy_joules = integrate_net_energy_joules(
+        workload_samples,
+        baseline_power_watts,
+        start_timestamp=workload_effective_start,
+        end_timestamp=workload_end,
+    )
 
     effective_duration = parse_effective_duration_seconds(metadata)
     throughput_mean_rps = workload_summary.get("throughput_mean_rps") if isinstance(workload_summary, dict) else None
@@ -306,22 +522,63 @@ def build_physical_power_meter_summary(run_dir, metadata, workload_summary):
     if isinstance(throughput_mean_rps, (int, float)) and isinstance(effective_duration, (int, float)):
         successful_requests = throughput_mean_rps * effective_duration
 
-    energy_total_delta = None
-    energy_metrics = meter_summary.get("metrics", {}).get("aenergy_total", {})
-    if isinstance(energy_metrics, dict):
-        energy_total_delta = energy_metrics.get("delta")
+    meter_energy_per_request_joules = None
+    if isinstance(baseline_corrected_workload_energy_joules, (int, float)) and isinstance(successful_requests, (int, float)) and successful_requests > 0:
+        meter_energy_per_request_joules = baseline_corrected_workload_energy_joules / successful_requests
 
-    if isinstance(energy_total_delta, (int, float)) and isinstance(successful_requests, (int, float)) and successful_requests > 0:
-        meter_summary["energy_per_request"] = energy_total_delta / successful_requests
+    meter_quality_flags = []
+    if not baseline_samples:
+        meter_quality_flags.append("missing_baseline")
+    if unit_unknown:
+        meter_quality_flags.append("meter_unit_unknown")
+    if len(meter_samples) < 3:
+        meter_quality_flags.append("too_few_meter_samples")
+    if isinstance(baseline_drift_ratio, (int, float)) and baseline_drift_ratio > 0.15:
+        meter_quality_flags.append("baseline_drift_too_high")
+    if isinstance(baseline_corrected_workload_energy_joules, (int, float)) and baseline_corrected_workload_energy_joules < 0:
+        meter_quality_flags.append("negative_baseline_corrected_energy")
 
-    if isinstance(metadata, dict):
-        power_meter_metadata = metadata.get("power_meter", {})
-        if isinstance(power_meter_metadata, dict):
-            meter_summary["source_url"] = power_meter_metadata.get("url")
-            meter_summary["interval_seconds"] = power_meter_metadata.get("interval_seconds")
-            meter_summary["request_timeout_seconds"] = power_meter_metadata.get("request_timeout_seconds")
-            meter_summary["sampler_exit_code"] = power_meter_metadata.get("exit_code")
-            meter_summary["sampler_pid"] = power_meter_metadata.get("pid")
+    meter_summary = {
+        "sample_count": len(meter_samples),
+        "baseline_sample_count": len(baseline_samples),
+        "workload_sample_count": len(workload_samples),
+        "error_count": sum(1 for sample in meter_samples if sample.get("error")),
+        "meter_energy_unit": meter_energy_unit,
+        "raw_energy_delta_wh": raw_energy_delta_wh,
+        "raw_energy_delta_joules": raw_energy_delta_joules,
+        "effective_energy_delta_wh": effective_energy_delta_wh,
+        "effective_energy_delta_joules": effective_energy_delta_joules,
+        "baseline_power_watts": baseline_power_watts,
+        "baseline_drift_ratio": baseline_drift_ratio,
+        "baseline_corrected_workload_energy_wh": (
+            baseline_corrected_workload_energy_joules / 3600.0
+            if isinstance(baseline_corrected_workload_energy_joules, (int, float))
+            else None
+        ),
+        "baseline_corrected_workload_energy_joules": baseline_corrected_workload_energy_joules,
+        "meter_energy_per_request_joules": meter_energy_per_request_joules,
+        "quality_flags": meter_quality_flags,
+        "metrics": {
+            "apower": {
+                "mean": safe_mean([sample.get("apower") for sample in meter_samples]),
+                "min": min([sample.get("apower") for sample in meter_samples if isinstance(sample.get("apower"), (int, float))], default=None),
+                "max": max([sample.get("apower") for sample in meter_samples if isinstance(sample.get("apower"), (int, float))], default=None),
+            },
+            "aenergy_total": {
+                "mean": safe_mean([sample.get("aenergy_total") for sample in meter_samples]),
+                "min": min([sample.get("aenergy_total") for sample in meter_samples if isinstance(sample.get("aenergy_total"), (int, float))], default=None),
+                "max": max([sample.get("aenergy_total") for sample in meter_samples if isinstance(sample.get("aenergy_total"), (int, float))], default=None),
+            },
+        },
+    }
+
+    if isinstance(power_meter_metadata, dict):
+        meter_summary["source_url"] = power_meter_metadata.get("url")
+        meter_summary["interval_seconds"] = power_meter_metadata.get("interval_seconds")
+        meter_summary["request_timeout_seconds"] = power_meter_metadata.get("request_timeout_seconds")
+        meter_summary["baseline_seconds"] = power_meter_metadata.get("baseline_seconds")
+        meter_summary["sampler_exit_code"] = power_meter_metadata.get("exit_code")
+        meter_summary["sampler_pid"] = power_meter_metadata.get("pid")
 
     return meter_summary
 

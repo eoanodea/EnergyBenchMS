@@ -195,6 +195,19 @@ def normalize_ramp_exclusion_seconds(cli_value, workload):
     return ramp_exclusion
 
 
+def normalize_baseline_seconds(cli_value):
+    """Resolve the baseline capture duration from CLI input."""
+    try:
+        baseline_seconds = int(cli_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid baseline seconds: {cli_value!r}") from exc
+
+    if baseline_seconds < 0:
+        raise ValueError("baseline seconds must be at least 0")
+
+    return baseline_seconds
+
+
 def create_runs_directory():
     """Create timestamped runs directory and return its path."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -222,6 +235,7 @@ def save_metadata(
     workload,
     timestamps,
     ramp_exclusion_seconds,
+    baseline_seconds,
     locust_artifacts,
     power_meter=None,
     workload_label=None,
@@ -239,6 +253,7 @@ def save_metadata(
         "locust_exit_code": locust_exit_code,
         "locust_error": locust_error,
         "ramp_exclusion_seconds": ramp_exclusion_seconds,
+        "baseline_seconds": baseline_seconds,
         "locust_artifacts": locust_artifacts,
         "timestamps": {
             "experiment_start": timestamps['experiment_start'],
@@ -337,6 +352,12 @@ def main():
         help="Resource kind to exclude from apply/delete (can be repeated)"
     )
     parser.add_argument(
+        "--baseline-seconds",
+        type=int,
+        default=20,
+        help="Seconds to record baseline samples before the workload starts (default: 20)",
+    )
+    parser.add_argument(
         "--power-meter-url",
         help="Optional physical power meter API URL for CSV sampling"
     )
@@ -378,6 +399,7 @@ def main():
             duration=args.duration,
         )
         validate_workload(workload)
+        baseline_seconds = normalize_baseline_seconds(args.baseline_seconds)
         ramp_exclusion_seconds = normalize_ramp_exclusion_seconds(
             args.ramp_exclusion_seconds,
             workload,
@@ -421,9 +443,6 @@ def main():
         # Deploy application through the shared lifecycle helper.
         manage_sut_up(args.app, args)
         
-        # Wait baseline period
-        wait_baseline(20)
-        
         runs_dir = None
         locust_csv_prefix = None
         locust_artifacts = {}
@@ -444,7 +463,9 @@ def main():
                     "url": args.power_meter_url,
                     "interval_seconds": args.power_meter_interval_seconds,
                     "request_timeout_seconds": args.power_meter_request_timeout_seconds,
+                    "energy_unit": "Wh",
                     "samples_csv": str(runs_dir / "physical_power_meter.csv"),
+                    "baseline_seconds": baseline_seconds,
                 }
                 power_meter_cmd = [
                     sys.executable,
@@ -457,6 +478,8 @@ def main():
                     str(args.power_meter_interval_seconds),
                     "--request-timeout-seconds",
                     str(args.power_meter_request_timeout_seconds),
+                    "--baseline-seconds",
+                    str(baseline_seconds),
                 ]
                 logger.info("Starting physical power meter sampler")
                 power_meter_process = subprocess.Popen(
@@ -470,12 +493,15 @@ def main():
                 "--power-meter-url was provided but no-results is enabled; skipping power meter sampling"
             )
 
+        # Allow the baseline capture window to elapse before the workload starts.
+        wait_baseline(baseline_seconds)
+
         # Record workload start
         workload_start_dt = datetime.now()
         timestamps['workload_start'] = workload_start_dt.isoformat()
         effective_start_dt = workload_start_dt + timedelta(seconds=ramp_exclusion_seconds)
         timestamps['workload_effective_start'] = effective_start_dt.isoformat()
-        
+
         # Run Locust workload
         locust_error = None
         locust_exit_code = None
@@ -529,6 +555,7 @@ def main():
                 workload,
                 timestamps,
                 ramp_exclusion_seconds,
+                baseline_seconds,
                 locust_artifacts,
                 power_meter=power_meter_artifacts,
                 workload_label=args.workload_label,

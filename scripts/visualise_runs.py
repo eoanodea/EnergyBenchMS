@@ -11,8 +11,12 @@ from urllib.parse import urlsplit, urlunsplit
 
 
 # Configure which containers belong to the system under test.
+# Expanded to include common application services across different deployments.
 SUT_CONTAINERS = [
-    "nginx",
+  "nginx",
+  "server",
+  "frontend",
+  "api",
 ]
 
 # Exclude infrastructure services from application-focused energy analysis.
@@ -90,19 +94,24 @@ def format_level_sort_key(level):
     return (1, 0, lowered)
 
 
-def get_filtered_sut_energy_means(summary):
+def get_filtered_sut_energy_means(summary, sut_container=None):
+    """Extract SUT energy means, optionally filtering to a specific container."""
     energy = summary.get("energy_by_container_name", {}) if isinstance(summary, dict) else {}
     out = {}
     for container_name, stats in energy.items():
         if container_name in EXCLUDED_CONTAINERS:
             continue
-        if container_name not in SUT_CONTAINERS:
+        # If a specific container is requested, prioritize that one
+        if sut_container:
+          if container_name != sut_container:
             continue
+        elif container_name not in SUT_CONTAINERS:
+          continue
         if not isinstance(stats, dict):
-            continue
+          continue
         value = stats.get("mean")
         if isinstance(value, (int, float)):
-            out[container_name] = value
+          out[container_name] = value
     return out
 
 
@@ -417,7 +426,10 @@ def build_run_row(item, sut_container):
     meter_sample_count = meter_summary.get("sample_count") if isinstance(meter_summary, dict) else None
     meter_error_count = meter_summary.get("error_count") if isinstance(meter_summary, dict) else None
     meter_power_mean = meter_power_stats.get("mean") if isinstance(meter_power_stats, dict) else None
-    meter_energy_delta = meter_energy_stats.get("delta") if isinstance(meter_energy_stats, dict) else None
+    meter_raw_energy_joules = meter_summary.get("raw_energy_delta_joules") if isinstance(meter_summary, dict) else None
+    meter_corrected_energy_joules = meter_summary.get("baseline_corrected_workload_energy_joules") if isinstance(meter_summary, dict) else None
+    meter_energy_per_request_joules = meter_summary.get("meter_energy_per_request_joules") if isinstance(meter_summary, dict) else None
+    meter_quality_flags = meter_summary.get("quality_flags", []) if isinstance(meter_summary, dict) else []
 
     if throughput_mean is None:
         throughput_mean = locust_stats.get("throughput_mean_rps")
@@ -439,7 +451,7 @@ def build_run_row(item, sut_container):
 
     ramp_exclusion_seconds = metadata.get("ramp_exclusion_seconds")
 
-    sut_means = get_filtered_sut_energy_means(summary)
+    sut_means = get_filtered_sut_energy_means(summary, sut_container)
     sut_energy_mean = sut_means.get(sut_container)
 
     energy_total = None
@@ -481,8 +493,11 @@ def build_run_row(item, sut_container):
             flags.append("energy_missing_or_zero")
 
     meter_enabled = bool((metadata.get("power_meter") or {}).get("url"))
-    if meter_enabled and not isinstance(meter_power_mean, (int, float)):
+    if meter_enabled and not isinstance(meter_corrected_energy_joules, (int, float)):
         flags.append("power_meter_missing")
+    for meter_flag in meter_quality_flags:
+      if meter_flag:
+        flags.append(str(meter_flag))
 
     return {
         "name": run_name,
@@ -503,7 +518,9 @@ def build_run_row(item, sut_container):
         "meter_sample_count": meter_sample_count,
         "meter_error_count": meter_error_count,
         "meter_power_mean": meter_power_mean,
-        "meter_energy_delta": meter_energy_delta,
+        "meter_raw_energy_joules": meter_raw_energy_joules,
+        "meter_corrected_energy_joules": meter_corrected_energy_joules,
+        "meter_energy_per_request_joules": meter_energy_per_request_joules,
         "flags": flags,
     }
 
@@ -782,6 +799,15 @@ def build_html(data):
       <div class=\"small\" id=\"filtersText\"></div>
     </section>
 
+    <section class=\"controls\" style=\"margin-bottom:14px;\">
+      <h2>Trend Chart X-Axis</h2>
+      <div class=\"actions\">
+        <button id=\"axisIterationsBtn\" type=\"button\">Iterations</button>
+        <button id=\"axisLevelsBtn\" type=\"button\">Actual levels</button>
+      </div>
+      <div class=\"small\">Switch the latency and energy trend charts between iteration order and workload-level labels.</div>
+    </section>
+
     <section class=\"card\" style=\"margin-bottom:14px;\">
       <h2>Per-Level Aggregate Summary (Mean ± Std Dev)</h2>
       <div class=\"table-wrap\">
@@ -846,7 +872,9 @@ def build_html(data):
               <th>Energy / Request</th>
               <th>Meter Samples</th>
               <th>Meter Power Mean</th>
-              <th>Meter Energy Delta</th>
+              <th>Meter Raw Energy</th>
+              <th>Meter Corrected Energy</th>
+              <th>Meter Energy / Request</th>
               <th>Meter Errors</th>
               <th>Quality Flags</th>
             </tr>
@@ -970,15 +998,50 @@ def build_html(data):
       return text;
     }}
 
+    function displayLevelLabel(row) {{
+      const runName = String((row && row.name) || '');
+      const levelMatch = runName.match(/level_(\\d+)/i);
+      if (levelMatch && levelMatch[1]) {{
+        return String(parseInt(levelMatch[1], 10));
+      }}
+      return String((row && row.workload_level) || 'unknown');
+    }}
+
+    function displayLevelSortKey(level) {{
+      const text = String(level || 'unknown');
+      if (/^\\d+$/.test(text)) return [0, Number(text), text];
+      return levelSortKey(text);
+    }}
+
+    function sortDisplayLevels(levels) {{
+      return [...levels].sort((a, b) => {{
+        const ka = displayLevelSortKey(a);
+        const kb = displayLevelSortKey(b);
+        if (ka[0] !== kb[0]) return ka[0] - kb[0];
+        if (ka[1] !== kb[1]) return ka[1] - kb[1];
+        return ka[2].localeCompare(kb[2]);
+      }});
+    }}
+
+    function groupRowsByDisplayLevel(rows) {{
+      const grouped = new Map();
+      rows.forEach((r) => {{
+        const level = displayLevelLabel(r);
+        if (!grouped.has(level)) grouped.set(level, []);
+        grouped.get(level).push(r);
+      }});
+      return grouped;
+    }}
+
     function buildLatencyIterationSeries(rows) {{
       const grouped = new Map();
       rows.forEach((r) => {{
-        const level = r.workload_level || 'unknown';
+        const level = displayLevelLabel(r);
         if (!grouped.has(level)) grouped.set(level, []);
         grouped.get(level).push(r);
       }});
 
-      const levels = sortLevels(Array.from(grouped.keys()));
+      const levels = sortDisplayLevels(Array.from(grouped.keys()));
       let maxLen = 0;
       const orderedRowsByLevel = levels.map((level) => {{
         const ordered = [...(grouped.get(level) || [])].sort((a, b) => {{
@@ -1013,15 +1076,38 @@ def build_html(data):
       return {{ labels, datasets }};
     }}
 
-    function buildEnergyComparisonSeries(rows) {{
+    function buildLatencyLevelSeries(rows) {{
+      const grouped = groupRowsByDisplayLevel(rows);
+      const levels = sortDisplayLevels(Array.from(grouped.keys()));
+      const labels = levels;
+      const dataPoints = levels.map((level) => {{
+        const values = (grouped.get(level) || []).map((row) => row.p95_latency);
+        return computeMean(values);
+      }});
+
+      return {{
+        labels,
+        datasets: [{{
+          label: 'p95 latency',
+          data: dataPoints,
+          borderColor: '#8a2d3b',
+          backgroundColor: '#8a2d3b55',
+          tension: 0.2,
+          spanGaps: true,
+          borderWidth: 2,
+        }}],
+      }};
+    }}
+
+    function buildEnergyComparisonIterationSeries(rows) {{
       const grouped = new Map();
       rows.forEach((r) => {{
-        const level = r.workload_level || 'unknown';
+        const level = displayLevelLabel(r);
         if (!grouped.has(level)) grouped.set(level, []);
         grouped.get(level).push(r);
       }});
 
-      const levels = sortLevels(Array.from(grouped.keys()));
+      const levels = sortDisplayLevels(Array.from(grouped.keys()));
       let maxLen = 0;
       const orderedRowsByLevel = levels.map((level) => {{
         const ordered = [...(grouped.get(level) || [])].sort((a, b) => {{
@@ -1044,8 +1130,11 @@ def build_html(data):
         }});
         const meterData = labels.map((_, i) => {{
           const row = entry.rows[i];
-          if (!row || typeof row.meter_energy_delta !== 'number' || Number.isNaN(row.meter_energy_delta)) return null;
-          return row.meter_energy_delta;
+          const corrected = row ? row.meter_corrected_energy_joules : null;
+          const legacy = row ? row.meter_energy_delta : null;
+          const value = (typeof corrected === 'number' && !Number.isNaN(corrected)) ? corrected : legacy;
+          if (typeof value !== 'number' || Number.isNaN(value)) return null;
+          return value;
         }});
 
         const hasKeplerData = keplerData.some((v) => v !== null);
@@ -1076,6 +1165,47 @@ def build_html(data):
           }});
         }}
       }});
+
+      return {{ labels, datasets }};
+    }}
+
+    function buildEnergyComparisonLevelSeries(rows) {{
+      const grouped = groupRowsByDisplayLevel(rows);
+      const levels = sortDisplayLevels(Array.from(grouped.keys()));
+      const labels = levels;
+      const keplerData = levels.map((level) => {{
+        const values = (grouped.get(level) || []).map((row) => row.energy_total);
+        return computeMean(values);
+      }});
+      const meterData = levels.map((level) => {{
+        const values = (grouped.get(level) || []).map((row) => row.meter_energy_delta);
+        return computeMean(values);
+      }});
+
+      const datasets = [];
+      if (keplerData.some((value) => value !== null)) {{
+        datasets.push({{
+          label: 'Kepler energy (Wh)',
+          data: keplerData,
+          borderColor: '#116466',
+          backgroundColor: '#11646655',
+          tension: 0.2,
+          spanGaps: true,
+          borderWidth: 2,
+        }});
+      }}
+      if (meterData.some((value) => value !== null)) {{
+        datasets.push({{
+          label: 'Meter energy (Wh)',
+          data: meterData,
+          borderColor: '#b85c38',
+          backgroundColor: '#b85c3855',
+          tension: 0.2,
+          spanGaps: true,
+          borderWidth: 2,
+          borderDash: [5, 5],
+        }});
+      }}
 
       return {{ labels, datasets }};
     }}
@@ -1142,7 +1272,9 @@ def build_html(data):
           formatMaybeNumber(r.energy_per_request, 9),
           r.meter_sample_count ?? '-',
           formatMaybeNumber(r.meter_power_mean, 6),
-          formatMaybeNumber(r.meter_energy_delta, 6),
+          formatMaybeNumber(r.meter_raw_energy_joules, 6),
+          formatMaybeNumber(r.meter_corrected_energy_joules, 6),
+          formatMaybeNumber(r.meter_energy_per_request_joules, 9),
           r.meter_error_count ?? '-',
           (r.flags || []).join(' | ') || '-',
         ];
@@ -1150,7 +1282,7 @@ def build_html(data):
         cells.forEach((value, idx) => {{
           const td = document.createElement('td');
           td.textContent = value;
-          if (idx === 18 && value !== '-') td.className = 'warn';
+          if (idx === 19 && value !== '-') td.className = 'warn';
           tr.appendChild(td);
         }});
 
@@ -1304,6 +1436,15 @@ def build_html(data):
       chartCpuMean.update();
     }}
 
+    let chartAxisMode = 'iterations';
+
+    function updateAxisModeButtons() {{
+      const iterationsBtn = document.getElementById('axisIterationsBtn');
+      const levelsBtn = document.getElementById('axisLevelsBtn');
+      if (iterationsBtn) iterationsBtn.classList.toggle('active', chartAxisMode === 'iterations');
+      if (levelsBtn) levelsBtn.classList.toggle('active', chartAxisMode === 'levels');
+    }}
+
     function updatePerRunCharts(rows) {{
       const labels = rows.map((r) => r.name);
 
@@ -1317,12 +1458,12 @@ def build_html(data):
       perRunEnergyChart.data.datasets[1].data = rows.map((r) => r.energy_per_request);
       perRunEnergyChart.update();
 
-      const latencySeries = buildLatencyIterationSeries(rows);
+      const latencySeries = chartAxisMode === 'levels' ? buildLatencyLevelSeries(rows) : buildLatencyIterationSeries(rows);
       latencyIterationChart.data.labels = latencySeries.labels;
       latencyIterationChart.data.datasets = latencySeries.datasets;
       latencyIterationChart.update();
 
-      const energySeries = buildEnergyComparisonSeries(rows);
+      const energySeries = chartAxisMode === 'levels' ? buildEnergyComparisonLevelSeries(rows) : buildEnergyComparisonIterationSeries(rows);
       energyComparisonChart.data.labels = energySeries.labels;
       energyComparisonChart.data.datasets = energySeries.datasets;
       energyComparisonChart.update();
@@ -1391,8 +1532,21 @@ def build_html(data):
       renderAll();
     }});
 
+    document.getElementById('axisIterationsBtn').addEventListener('click', () => {{
+      chartAxisMode = 'iterations';
+      updateAxisModeButtons();
+      renderAll();
+    }});
+
+    document.getElementById('axisLevelsBtn').addEventListener('click', () => {{
+      chartAxisMode = 'levels';
+      updateAxisModeButtons();
+      renderAll();
+    }});
+
     renderConfigSummary();
     renderRunSelector();
+    updateAxisModeButtons();
     renderAll();
   </script>
 </body>
