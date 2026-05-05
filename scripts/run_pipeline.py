@@ -817,6 +817,7 @@ def main():
                 "energy_source": args.energy_source,
                 "power_meter": build_power_meter_config(args),
                 "count": args.count,
+                "cooldown_seconds": args.cooldown_seconds,
                 "workload_levels": workload_levels,
                 "runs": [],
             }

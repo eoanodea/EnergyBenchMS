@@ -343,6 +343,7 @@ def infer_experiment_config(runs_dir, runs, plan):
             repetitions_per_level = plan.get("count")
             warmup_enabled = True
             cleanup_reset_enabled = True
+            cooldown_seconds = plan.get("cooldown_seconds")
         elif plan.get("_plan_file") == "saturation_plan.json":
             levels_used = [str(level) for level in plan.get("levels", [])]
             repetitions_per_level = 1
