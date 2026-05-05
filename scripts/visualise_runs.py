@@ -100,24 +100,29 @@ def format_level_sort_key(level):
     return (1, 0, lowered)
 
 
-def get_filtered_sut_energy_means(summary, sut_container=None):
-    """Extract SUT energy means, optionally filtering to a specific container."""
+def get_filtered_sut_energy_means(summary, sut_container=None, sut_containers=None):
+    """Extract SUT energy means, optionally filtering to a specific container.
+
+    `sut_containers` may be provided (list/set) to override the default `SUT_CONTAINERS` allowlist.
+    """
     energy = summary.get("energy_by_container_name", {}) if isinstance(summary, dict) else {}
     out = {}
+    allowed = set(sut_containers) if isinstance(sut_containers, (list, tuple, set)) else set(SUT_CONTAINERS)
     for container_name, stats in energy.items():
         if container_name in EXCLUDED_CONTAINERS:
             continue
         # If a specific container is requested, prioritize that one
         if sut_container:
-          if container_name != sut_container:
-            continue
-        elif container_name not in SUT_CONTAINERS:
-          continue
+            if container_name != sut_container:
+                continue
+        else:
+            if container_name not in allowed:
+                continue
         if not isinstance(stats, dict):
-          continue
+            continue
         value = stats.get("mean")
         if isinstance(value, (int, float)):
-          out[container_name] = value
+            out[container_name] = value
     return out
 
 
@@ -410,7 +415,7 @@ def infer_experiment_config(runs_dir, runs, plan):
     }
 
 
-def build_run_row(item, sut_container):
+def build_run_row(item, sut_container, sut_containers=None):
     run_name = item["run_name"]
     summary = item.get("summary") if isinstance(item.get("summary"), dict) else {}
     metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
@@ -466,7 +471,7 @@ def build_run_row(item, sut_container):
 
     ramp_exclusion_seconds = metadata.get("ramp_exclusion_seconds")
 
-    sut_means = get_filtered_sut_energy_means(summary, sut_container)
+    sut_means = get_filtered_sut_energy_means(summary, sut_container, sut_containers)
     sut_energy_mean = sut_means.get(sut_container)
 
     energy_total = None
@@ -612,7 +617,19 @@ def compute_level_aggregates(run_rows):
 
 
 def make_dashboard_data(runs_dir, runs, sut_container):
-    run_rows = [build_run_row(item, sut_container) for item in runs]
+    # Prefer metadata-provided SUT containers where available
+    sut_containers_list = None
+    for item in runs:
+        md = item.get("metadata") if isinstance(item.get("metadata"), dict) else None
+        if isinstance(md, dict):
+            sc = md.get("sut_containers") or (md.get("deployment") or {}).get("sut_containers")
+            if isinstance(sc, list) and sc:
+                sut_containers_list = sc
+                break
+    if sut_containers_list is None:
+        sut_containers_list = SUT_CONTAINERS
+
+    run_rows = [build_run_row(item, sut_container, sut_containers_list) for item in runs]
     add_latency_outlier_flags(run_rows)
 
     cpu_values = [row["cpu_mean"] for row in run_rows]
@@ -638,7 +655,7 @@ def make_dashboard_data(runs_dir, runs, sut_container):
 
     return {
         "sut_container": sut_container,
-        "sut_containers": SUT_CONTAINERS,
+        "sut_containers": sut_containers_list,
         "excluded_containers": sorted(EXCLUDED_CONTAINERS),
         "experiment_config": config,
         "quality_counts": quality_counts,

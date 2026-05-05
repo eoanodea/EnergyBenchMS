@@ -567,6 +567,26 @@ def main():
             metadata_file = runs_dir / "metadata.json"
             with metadata_file.open("r", encoding="utf-8") as infile:
                 metadata = json.load(infile)
+
+            # Attempt to detect SUT container names via kubectl (prefer deployment namespace if available)
+            sut_containers = []
+            try:
+                ns = namespace_override or (deployment_targets[0].get("namespace") if deployment_targets else None) or "default"
+                kubectl_cmd = ["kubectl", "get", "pods", "-n", ns, "-o", "json"]
+                logger.info(f"Detecting SUT containers using kubectl in namespace '{ns}'")
+                out = subprocess.check_output(kubectl_cmd)
+                pods_json = json.loads(out)
+                for item in pods_json.get("items", []):
+                    for c in item.get("spec", {}).get("containers", []):
+                        name = c.get("name")
+                        if name and name not in sut_containers:
+                            sut_containers.append(name)
+            except Exception as exc:
+                logger.warning(f"Could not run kubectl to detect SUT containers: {exc}")
+
+            if sut_containers:
+                metadata["sut_containers"] = sut_containers
+
             metadata["deployment"] = {
                 "manifest_source": str(manifest_source),
                 "namespace_override": namespace_override,
