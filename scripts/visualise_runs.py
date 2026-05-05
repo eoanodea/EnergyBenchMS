@@ -104,15 +104,20 @@ def get_filtered_sut_energy_means(summary, sut_container=None, sut_containers=No
     """Extract SUT energy means, optionally filtering to a specific container.
 
     `sut_containers` may be provided (list/set) to override the default `SUT_CONTAINERS` allowlist.
+    If the allowlist matches no containers, falls back to all non-excluded containers.
     """
     energy = summary.get("energy_by_container_name", {}) if isinstance(summary, dict) else {}
     out = {}
     allowed = set(sut_containers) if isinstance(sut_containers, (list, tuple, set)) else set(SUT_CONTAINERS)
+    
+    # If sut_containers was explicitly provided, use fallback strategy: try exact matches first, then all non-excluded
+    use_fallback = isinstance(sut_containers, (list, tuple, set))
+    
     for container_name, stats in energy.items():
         if container_name in EXCLUDED_CONTAINERS:
             continue
-        # If a specific container is requested, prioritize that one
-        if sut_container:
+        # If a specific container is requested, prioritize that one (only if using default allowlist)
+        if sut_container and not use_fallback:
             if container_name != sut_container:
                 continue
         else:
@@ -123,6 +128,18 @@ def get_filtered_sut_energy_means(summary, sut_container=None, sut_containers=No
         value = stats.get("mean")
         if isinstance(value, (int, float)):
             out[container_name] = value
+    
+    # Fallback: if allowlist returned no matches and we were using an explicit allowlist, include all non-excluded
+    if not out and use_fallback:
+        for container_name, stats in energy.items():
+            if container_name in EXCLUDED_CONTAINERS:
+                continue
+            if not isinstance(stats, dict):
+                continue
+            value = stats.get("mean")
+            if isinstance(value, (int, float)):
+                out[container_name] = value
+    
     return out
 
 
@@ -472,7 +489,10 @@ def build_run_row(item, sut_container, sut_containers=None):
     ramp_exclusion_seconds = metadata.get("ramp_exclusion_seconds")
 
     sut_means = get_filtered_sut_energy_means(summary, sut_container, sut_containers)
-    sut_energy_mean = sut_means.get(sut_container)
+    # Prefer the specific sut_container if available and non-zero, otherwise sum all filtered containers
+    sut_energy_mean = sut_means.get(sut_container) if sut_means.get(sut_container) else (
+        sum(sut_means.values()) / len(sut_means) if sut_means else None
+    )
 
     energy_total = None
     if isinstance(sut_energy_mean, (int, float)) and isinstance(duration_seconds, (int, float)):
@@ -1043,6 +1063,14 @@ def build_html(data):
           energy_total_std: computeStdev(metricValues('energy_total')),
           energy_per_request_wh_mean: computeMean(metricValues('energy_per_request').map(joulesToWh)),
           energy_per_request_wh_std: computeStdev(metricValues('energy_per_request').map(joulesToWh)),
+          meter_power_mean: computeMean(metricValues('meter_power_mean')),
+          meter_power_std: computeStdev(metricValues('meter_power_mean')),
+          meter_corrected_energy_wh_mean: computeMean(metricValues('meter_corrected_energy_wh')),
+          meter_corrected_energy_wh_std: computeStdev(metricValues('meter_corrected_energy_wh')),
+          display_energy_total_mean: computeMean([...items].map((r) => r.meter_corrected_energy_wh ?? r.energy_total)),
+          display_energy_total_std: computeStdev([...items].map((r) => r.meter_corrected_energy_wh ?? r.energy_total)),
+          display_energy_per_request_mean: computeMean([...items].map((r) => r.meter_energy_per_request_wh ?? r.energy_per_request)),
+          display_energy_per_request_std: computeStdev([...items].map((r) => r.meter_energy_per_request_wh ?? r.energy_per_request)),
         }};
       }});
     }}
