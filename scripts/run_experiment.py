@@ -568,24 +568,18 @@ def main():
             with metadata_file.open("r", encoding="utf-8") as infile:
                 metadata = json.load(infile)
 
-            # Attempt to detect SUT container names via kubectl (prefer deployment namespace if available)
-            sut_containers = []
-            try:
-                ns = namespace_override or (deployment_targets[0].get("namespace") if deployment_targets else None) or "default"
-                kubectl_cmd = ["kubectl", "get", "pods", "-n", ns, "-o", "json"]
-                logger.info(f"Detecting SUT containers using kubectl in namespace '{ns}'")
-                out = subprocess.check_output(kubectl_cmd)
-                pods_json = json.loads(out)
-                for item in pods_json.get("items", []):
-                    for c in item.get("spec", {}).get("containers", []):
-                        name = c.get("name")
-                        if name and name not in sut_containers:
-                            sut_containers.append(name)
-            except Exception as exc:
-                logger.warning(f"Could not run kubectl to detect SUT containers: {exc}")
+            # Store deployment names as the SUT container allowlist.
+            # These names are what we expect to match Kepler's container_name labels.
+            sut_containers = [
+                item["name"]
+                for item in deployment_targets
+                if isinstance(item, dict) and item.get("name")
+            ]
+            if not sut_containers:
+                sut_containers = [infer_sut_name(args.app, filtered_manifests)]
 
-            if sut_containers:
-                metadata["sut_containers"] = sut_containers
+            metadata["sut_containers"] = sut_containers
+            metadata["sut_container_source"] = "deployment_targets"
 
             metadata["deployment"] = {
                 "manifest_source": str(manifest_source),
