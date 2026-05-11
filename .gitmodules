@@ -4,3 +4,6 @@
 [submodule "apps/onlineboutique"]
 	path = apps/onlineboutique
 	url = git@github.com:GoogleCloudPlatform/microservices-demo.git
+[submodule "apps/oteldemo"]
+	path = apps/oteldemo
+	url = git@github.com:open-telemetry/opentelemetry-demo.git
