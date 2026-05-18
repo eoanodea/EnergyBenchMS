@@ -6,9 +6,9 @@ workload_levels:
   - high: 80
 spawn_rate: 5
 duration: 120
-port: 30001
+port: 30450
 saturation:
-  levels: [5, 10, 20, 30, 40]
+  levels: [20, 40, 60, 80, 100, 150, 200, 300, 500]
   dwell_seconds: 120
   spawn_rate: 2
   ramp_exclusion_seconds: 20
