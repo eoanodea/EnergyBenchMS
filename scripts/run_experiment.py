@@ -6,6 +6,7 @@ Deploys an application to Kubernetes, waits for readiness, then runs a Locust wo
 """
 
 import argparse
+import csv
 import json
 import logging
 import subprocess
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 MANAGE_SUT_SCRIPT = Path(__file__).resolve().parent / "manage_sut.py"
 POWER_METER_SAMPLER_SCRIPT = Path(__file__).resolve().parent / "sample_power_meter.py"
+DEFAULT_MAX_ERROR_RATE = 0.01
 
 
 def load_workload(workload_path):
@@ -149,6 +151,50 @@ def run_locust(workload, locust_file_path, csv_prefix=None):
     logger.info("Locust workload completed")
 
 
+def _read_numeric_field(row, field_names):
+    """Return the first numeric field value found in a CSV row."""
+    for field_name in field_names:
+        raw_value = row.get(field_name)
+        if raw_value in (None, ""):
+            continue
+        try:
+            return float(raw_value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def read_locust_error_rate(stats_csv_path):
+    """Read aggregated Locust error rate from locust_stats.csv if available."""
+    stats_path = Path(stats_csv_path)
+    if not stats_path.exists():
+        return None
+
+    with stats_path.open("r", encoding="utf-8", newline="") as infile:
+        reader = csv.DictReader(infile)
+        for row in reader:
+            row_type = (row.get("Type") or "").strip().lower()
+            row_name = (row.get("Name") or "").strip().lower()
+            if row_type != "aggregated" and row_name != "aggregated":
+                continue
+
+            request_count = _read_numeric_field(
+                row,
+                ["Request Count", "# requests", "# reqs", "Num Requests"],
+            )
+            failure_count = _read_numeric_field(
+                row,
+                ["Failure Count", "# failures", "# fails", "Num Failures"],
+            )
+            if request_count is None or request_count <= 0:
+                return None
+            if failure_count is None:
+                failure_count = 0.0
+            return max(0.0, min(1.0, failure_count / request_count))
+
+    return None
+
+
 def apply_workload_overrides(workload, users=None, spawn_rate=None, duration=None):
     """Apply optional CLI overrides to workload fields."""
     merged = dict(workload)
@@ -208,6 +254,27 @@ def normalize_baseline_seconds(cli_value):
     return baseline_seconds
 
 
+def normalize_max_error_rate(cli_value, workload):
+    """Resolve maximum allowed error rate from CLI/workload/default values."""
+    candidates = [
+        cli_value,
+        workload.get("max_error_rate"),
+        workload.get("error_rate_threshold"),
+        workload.get("allowed_error_rate"),
+    ]
+    selected = next((value for value in candidates if value is not None), DEFAULT_MAX_ERROR_RATE)
+
+    try:
+        max_error_rate = float(selected)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid max error rate: {selected!r}") from exc
+
+    if max_error_rate < 0 or max_error_rate > 1:
+        raise ValueError("max error rate must be between 0 and 1")
+
+    return max_error_rate
+
+
 def create_runs_directory():
     """Create timestamped runs directory and return its path."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -242,6 +309,9 @@ def save_metadata(
     experiment_status="success",
     locust_exit_code=None,
     locust_error=None,
+    locust_observed_error_rate=None,
+    locust_max_error_rate=None,
+    locust_error_rate_threshold_exceeded=None,
 ):
     """Save experiment metadata to JSON file."""
     metadata = {
@@ -252,6 +322,9 @@ def save_metadata(
         "experiment_status": experiment_status,
         "locust_exit_code": locust_exit_code,
         "locust_error": locust_error,
+        "locust_observed_error_rate": locust_observed_error_rate,
+        "locust_max_error_rate": locust_max_error_rate,
+        "locust_error_rate_threshold_exceeded": locust_error_rate_threshold_exceeded,
         "ramp_exclusion_seconds": ramp_exclusion_seconds,
         "baseline_seconds": baseline_seconds,
         "locust_artifacts": locust_artifacts,
@@ -358,6 +431,14 @@ def main():
         help="Seconds to record baseline samples before the workload starts (default: 20)",
     )
     parser.add_argument(
+        "--max-error-rate",
+        type=float,
+        help=(
+            "Maximum allowed Locust request failure ratio (0-1). "
+            "Defaults to workload max_error_rate/error_rate_threshold/allowed_error_rate, or 0.01."
+        ),
+    )
+    parser.add_argument(
         "--power-meter-url",
         help="Optional physical power meter API URL for CSV sampling"
     )
@@ -400,6 +481,7 @@ def main():
         )
         validate_workload(workload)
         baseline_seconds = normalize_baseline_seconds(args.baseline_seconds)
+        max_error_rate = normalize_max_error_rate(args.max_error_rate, workload)
         ramp_exclusion_seconds = normalize_ramp_exclusion_seconds(
             args.ramp_exclusion_seconds,
             workload,
@@ -505,6 +587,9 @@ def main():
         # Run Locust workload
         locust_error = None
         locust_exit_code = None
+        locust_observed_error_rate = None
+        locust_error_rate_threshold_exceeded = None
+        experiment_failed = False
         try:
             run_locust(workload, resolved_locustfile, csv_prefix=locust_csv_prefix)
         except subprocess.CalledProcessError as exc:
@@ -536,8 +621,43 @@ def main():
         # Record workload end
         timestamps['workload_end'] = datetime.now().isoformat()
 
+        if not args.no_results and locust_artifacts.get("stats_csv"):
+            locust_observed_error_rate = read_locust_error_rate(locust_artifacts["stats_csv"])
+            if locust_observed_error_rate is not None:
+                locust_error_rate_threshold_exceeded = locust_observed_error_rate > max_error_rate
+                logger.info(
+                    "Observed Locust error rate: %.6f (threshold: %.6f)",
+                    locust_observed_error_rate,
+                    max_error_rate,
+                )
+            else:
+                logger.warning(
+                    "Could not determine Locust error rate from %s",
+                    locust_artifacts["stats_csv"],
+                )
+
+        if locust_error_rate_threshold_exceeded is True:
+            experiment_failed = True
+            logger.error(
+                "Locust error rate exceeded threshold (observed=%.6f, threshold=%.6f)",
+                locust_observed_error_rate,
+                max_error_rate,
+            )
+        elif locust_error and args.no_results:
+            experiment_failed = True
+            logger.warning("Locust exited non-zero during no-results run")
+        elif locust_error and not args.no_results and locust_observed_error_rate is None:
+            experiment_failed = True
+            logger.error(
+                "Locust exited non-zero and error rate could not be evaluated; marking run as failed"
+            )
+        elif locust_error:
+            logger.warning(
+                "Locust exited non-zero but error rate is within threshold; preserving run artifacts"
+            )
+
         if args.no_results:
-            if locust_error:
+            if experiment_failed:
                 logger.info("=" * 60)
                 logger.info("Warmup completed with errors, continuing pipeline")
                 logger.info("No results directory created")
@@ -559,9 +679,12 @@ def main():
                 locust_artifacts,
                 power_meter=power_meter_artifacts,
                 workload_label=args.workload_label,
-                experiment_status="failed" if locust_error else "success",
+                experiment_status="failed" if experiment_failed else "success",
                 locust_exit_code=locust_exit_code,
                 locust_error=locust_error,
+                locust_observed_error_rate=locust_observed_error_rate,
+                locust_max_error_rate=max_error_rate,
+                locust_error_rate_threshold_exceeded=locust_error_rate_threshold_exceeded,
             )
 
             metadata_file = runs_dir / "metadata.json"
@@ -593,16 +716,13 @@ def main():
                 json.dump(metadata, outfile, indent=2)
             
             logger.info("=" * 60)
-            if locust_error:
+            if experiment_failed:
                 logger.info("Experiment completed with errors")
             else:
                 logger.info("Experiment completed successfully")
             logger.info(f"Results saved to: {runs_dir}")
             logger.info("=" * 60)
 
-        if locust_error and not args.no_results:
-            sys.exit(locust_exit_code or 1)
-        
     except Exception as e:
         logger.error(f"Experiment failed: {e}", exc_info=True)
         sys.exit(1)

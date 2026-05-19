@@ -1,12 +1,12 @@
-target: http://192.168.0.100:30427
+target: http://192.168.0.100:30450
 users: 60
 workload_levels:
   - low: 40
-  - medium: 80
+  - medium: 100
   - high: 150
 spawn_rate: 5
 duration: 120
-port: 30427
+port: 30450
 saturation:
   levels: [20, 40, 60, 80, 100, 150, 200, 300, 500]
   dwell_seconds: 120
