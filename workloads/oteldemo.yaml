@@ -1,9 +1,9 @@
 target: http://192.168.0.100:30450
 users: 60
 workload_levels:
-  - low: 20
-  - medium: 40
-  - high: 80
+  - low: 60
+  - medium: 150
+  - high: 200
 spawn_rate: 5
 duration: 120
 port: 30450
