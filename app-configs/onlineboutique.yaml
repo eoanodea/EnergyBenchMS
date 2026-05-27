@@ -18,3 +18,8 @@ exclude_resource_patterns:
   - "(^|/)grafana($|[-/])"
   - "(^|/)jaeger($|[-/])"
   - "(^|/)zipkin($|[-/])"
+
+attribution:
+  service_overrides: {}
+  service_groups: {}
+  ignore_patterns: []
