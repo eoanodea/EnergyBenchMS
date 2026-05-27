@@ -704,6 +704,11 @@ def main():
             "as fallback (default: auto)."
         ),
     )
+    parser.add_argument(
+        "--persist-prom-queries",
+        action="store_true",
+        help="Persist extra Prometheus diagnostic queries to <run_dir>/prom_queries",
+    )
 
     args = parser.parse_args()
     run_dir = Path(args.run_dir)
@@ -780,6 +785,47 @@ def main():
 
     save_results(run_dir, "query_info.json", query_info)
     print_query_summary(query_info)
+
+    # Optional: persist additional Prometheus diagnostic queries used for mapping
+    if getattr(args, "persist_prom_queries", False):
+        prom_dir = Path(run_dir) / "prom_queries"
+        prom_dir.mkdir(parents=True, exist_ok=True)
+
+        def query_series(prom_url, match, start, end):
+            try:
+                response = requests.get(
+                    f"{prom_url.rstrip('/')}/api/v1/series",
+                    params={"match[]": match, "start": start, "end": end},
+                    timeout=60,
+                )
+                response.raise_for_status()
+                return response.json(), None
+            except (requests.RequestException, ValueError) as exc:
+                return empty_prometheus_payload(str(exc)), str(exc)
+
+        extra_series_queries = {
+            "kepler_series_all.json": "kepler_container_cpu_joules_total",
+            "kepler_series_with_pod_id.json": 'kepler_container_cpu_joules_total{pod_id!=""}',
+            "kepler_series_runtime_docker.json": 'kepler_container_cpu_joules_total{runtime="docker"}',
+        }
+
+        # range queries for grouped/aggregated kepler outputs
+        extra_range_queries = {
+            "kepler_by_container_name.json": ENERGY_QUERY_JOULES,
+            "kepler_counts_by_labels.json": 'count by (container_id,container_name,runtime) (kepler_container_cpu_joules_total{container_name!=""})',
+            "kepler_ns_pod_container.json": 'sum by (namespace,pod,container,container_id) (rate(kepler_container_cpu_joules_total[1m]))',
+        }
+
+        # run and save series queries
+        for fname, match in extra_series_queries.items():
+            payload, error = query_series(args.prom_url, match, workload_start, workload_end)
+            save_results(prom_dir, fname, payload)
+
+        # run and save range queries
+        for fname, promql in extra_range_queries.items():
+            payload, error = query_prometheus_safe(args.prom_url, promql, workload_start, workload_end, step=DEFAULT_STEP)
+            save_results(prom_dir, fname, payload)
+        print(f"Persisted extra Prometheus diagnostic queries to {prom_dir}")
 
 
 if __name__ == "__main__":
