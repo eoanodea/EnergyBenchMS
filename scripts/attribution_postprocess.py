@@ -145,12 +145,114 @@ def extract_hex_candidates(text: str) -> List[str]:
     return [c.lower() for c in candidates]
 
 
+def normalize_uid_for_cgroup(uid: Any) -> str:
+    return str(uid or "").strip().lower().replace("-", "_")
+
+
+def extract_pod_uid_candidates(text: Any) -> List[str]:
+    if text in (None, ""):
+        return []
+    return [candidate.lower() for candidate in re.findall(r"pod([0-9a-f_]{36})", str(text), flags=re.IGNORECASE)]
+
+
+def extract_containerd_scope_ids(text: Any) -> List[str]:
+    if text in (None, ""):
+        return []
+    return [candidate.lower() for candidate in re.findall(r"cri-containerd-([0-9a-f]{8,64})\.scope", str(text), flags=re.IGNORECASE)]
+
+
+def normalize_container_runtime_id(raw_container_id: Any) -> Optional[str]:
+    if raw_container_id in (None, ""):
+        return None
+    text = str(raw_container_id).strip()
+    if "://" in text:
+        text = text.split("://", 1)[1]
+    candidates = extract_hex_candidates(text)
+    if not candidates:
+        return None
+    return max(candidates, key=len)
+
+
+def deployment_name_from_owner_references(owner_refs: Any) -> Optional[str]:
+    if not isinstance(owner_refs, list):
+        return None
+    for owner in owner_refs:
+        if not isinstance(owner, dict):
+            continue
+        kind = str(owner.get("kind") or "").lower()
+        name = normalize_entity_name(owner.get("name"))
+        if not name:
+            continue
+        if kind == "deployment":
+            return name
+        if kind == "replicaset":
+            # Typical ReplicaSet naming: <deployment>-<hash>
+            return re.sub(r"-[a-f0-9]{8,10}$", "", name)
+    return None
+
+
+def build_k8s_snapshot_indexes(snapshot: Dict[str, Any]) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+    """Build lookup maps from a `kubectl get pods -A -o json` snapshot.
+
+    Returns:
+    - container_hex_map: full container hex id -> pod/container/deployment metadata
+    - pod_uid_map: normalized pod uid (underscored) -> pod/deployment metadata
+    """
+    container_hex_map: Dict[str, Dict[str, Any]] = {}
+    pod_uid_map: Dict[str, Dict[str, Any]] = {}
+
+    items = snapshot.get("items", []) if isinstance(snapshot, dict) else []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        metadata = item.get("metadata", {}) if isinstance(item.get("metadata"), dict) else {}
+        status = item.get("status", {}) if isinstance(item.get("status"), dict) else {}
+
+        namespace = normalize_entity_name(metadata.get("namespace"))
+        pod_name = normalize_entity_name(metadata.get("name"))
+        pod_uid_raw = metadata.get("uid")
+        pod_uid_norm = normalize_uid_for_cgroup(pod_uid_raw)
+        deployment_name = deployment_name_from_owner_references(metadata.get("ownerReferences"))
+
+        if pod_uid_norm:
+            pod_uid_map[pod_uid_norm] = {
+                "pod_name": pod_name,
+                "namespace": namespace,
+                "deployment": deployment_name,
+                "provenance": "k8s_pod_snapshot:pod_uid",
+            }
+
+        status_lists = []
+        for field_name in ("containerStatuses", "initContainerStatuses", "ephemeralContainerStatuses"):
+            raw_list = status.get(field_name, [])
+            if isinstance(raw_list, list):
+                status_lists.extend(raw_list)
+
+        for container_status in status_lists:
+            if not isinstance(container_status, dict):
+                continue
+            runtime_id = normalize_container_runtime_id(container_status.get("containerID"))
+            if not runtime_id:
+                continue
+            container_hex_map[runtime_id] = {
+                "container_name": normalize_entity_name(container_status.get("name")),
+                "pod_name": pod_name,
+                "namespace": namespace,
+                "deployment": deployment_name,
+                "pod_uid": pod_uid_norm,
+                "provenance": "k8s_pod_snapshot:containerStatuses",
+            }
+
+    return container_hex_map, pod_uid_map
+
+
 def reconcile_entities(
     energy_series: List[Dict[str, Any]],
     cpu_series: List[Dict[str, Any]],
     cpu_k8s_payload: Dict[str, Any],
     kube_pod_info: Dict[str, Any],
     kube_pod_container_info: Dict[str, Any],
+    k8s_pod_snapshot: Dict[str, Any],
     metadata: Dict[str, Any],
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Attempt to reconcile entity identities across sources.
@@ -161,6 +263,12 @@ def reconcile_entities(
     """
     # Build hex -> info mapping from kube payloads and cpu_k8s payload
     hex_map: Dict[str, Dict[str, Any]] = {}
+    pod_uid_map: Dict[str, Dict[str, Any]] = {}
+
+    # From captured kubectl snapshot (authoritative fallback when kube-state-metrics is absent).
+    snapshot_hex_map, snapshot_uid_map = build_k8s_snapshot_indexes(k8s_pod_snapshot)
+    hex_map.update(snapshot_hex_map)
+    pod_uid_map.update(snapshot_uid_map)
 
     # From kube_pod_container_info (if present)
     try:
@@ -190,18 +298,44 @@ def reconcile_entities(
                     cid_labels.extend(extract_hex_candidates(str(v)))
             for cid in cid_labels:
                 for h in extract_hex_candidates(str(cid)):
-                    hex_map.setdefault(h, {}).update({
-                        "container_name": normalize_entity_name(metric.get("container_name") or metric.get("container")),
-                        "pod_name": normalize_entity_name(metric.get("pod") or metric.get("pod_name") or metric.get("kube_pod_name")),
-                        "deployment": normalize_entity_name(metric.get("deployment") or metric.get("kube_deployment")),
-                        "provenance": "cpu_k8s_by_id_metric",
-                    })
+                    existing = hex_map.setdefault(h, {})
+                    container_name_value = normalize_entity_name(metric.get("container_name") or metric.get("container"))
+                    pod_name_value = normalize_entity_name(metric.get("pod") or metric.get("pod_name") or metric.get("kube_pod_name"))
+                    deployment_value = normalize_entity_name(metric.get("deployment") or metric.get("kube_deployment"))
+                    if container_name_value:
+                        existing["container_name"] = container_name_value
+                    if pod_name_value:
+                        existing["pod_name"] = pod_name_value
+                    if deployment_value:
+                        existing["deployment"] = deployment_value
+                    if "provenance" not in existing:
+                        existing["provenance"] = "cpu_k8s_by_id_metric"
+
+            # cAdvisor style id paths: .../pod<uid_norm>/.../cri-containerd-<container_id>.scope
+            for metric_value in metric.values():
+                pod_uid_candidates = extract_pod_uid_candidates(metric_value)
+                container_scope_ids = extract_containerd_scope_ids(metric_value)
+
+                for uid_norm in pod_uid_candidates:
+                    if uid_norm in pod_uid_map:
+                        info = pod_uid_map[uid_norm]
+                        for container_hex in container_scope_ids:
+                            hex_map.setdefault(container_hex, {}).update({
+                                "container_name": normalize_entity_name(metric.get("container_name") or metric.get("container")) or info.get("container_name"),
+                                "pod_name": info.get("pod_name"),
+                                "deployment": info.get("deployment"),
+                                "namespace": info.get("namespace"),
+                                "provenance": "cpu_k8s_by_id:cgroup_path+snapshot",
+                            })
     except Exception:
         pass
 
     # Heuristic mapping: scan human-labeled cpu_series for patterns containing hex
     for row in cpu_series:
         raw = row.get("raw_entity_name") or ""
+        raw_text = str(raw).lower()
+        if "kubepods" in raw_text or "cri-containerd" in raw_text:
+            continue
         for h in extract_hex_candidates(str(raw)):
             hex_map.setdefault(h, {}).update({
                 "container_name": normalize_entity_name(row.get("entity_name") or raw),
@@ -222,26 +356,81 @@ def reconcile_entities(
     # Build canonical name for each series row using heuristics
     def pick_canonical(row: Dict[str, Any]) -> Dict[str, Any]:
         raw = row.get("raw_entity_name") or row.get("entity_name") or ""
-        candidates = extract_hex_candidates(str(raw))
-        cid = candidates[0] if candidates else None
+        metric = row.get("metric", {}) if isinstance(row.get("metric"), dict) else {}
+
+        hex_candidates: List[str] = []
+        for source_value in (
+            raw,
+            row.get("entity_name"),
+            metric.get("container_id"),
+            metric.get("id"),
+            metric.get("container"),
+        ):
+            hex_candidates.extend(extract_hex_candidates(str(source_value or "")))
+
+        for metric_value in metric.values():
+            hex_candidates.extend(extract_hex_candidates(metric_value))
+            hex_candidates.extend(extract_containerd_scope_ids(metric_value))
+
+        # Prefer the longest candidate (typically full 64-hex container IDs).
+        hex_candidates = [candidate.lower() for candidate in hex_candidates if candidate]
+        cid = max(hex_candidates, key=len) if hex_candidates else None
+
+        pod_uid_candidates: List[str] = []
+        for metric_value in metric.values():
+            pod_uid_candidates.extend(extract_pod_uid_candidates(metric_value))
+
+        def resolve_hex_info(candidate_hex: Optional[str]) -> Dict[str, Any]:
+            if not candidate_hex:
+                return {}
+            if candidate_hex in hex_map:
+                return hex_map[candidate_hex]
+            # Allow prefix matching for short docker/containerd identifiers.
+            for known_hex, info in hex_map.items():
+                if known_hex.startswith(candidate_hex) or candidate_hex.startswith(known_hex):
+                    return info
+            return {}
+
         info = {}
         provenance_parts: List[str] = []
         confidence = 0.0
         container_name = None
         pod_name = None
         deployment = None
+        namespace = None
 
-        if cid and cid in hex_map:
-            info = hex_map[cid]
+        info = resolve_hex_info(cid)
+        if info:
             container_name = info.get("container_name")
             pod_name = info.get("pod_name")
             deployment = info.get("deployment")
+            namespace = info.get("namespace")
             provenance_parts.append(info.get("provenance") or "hex_map")
             confidence = 0.95 if container_name else 0.6
 
-        # If no hex mapping, prefer existing human name
+        if not pod_name:
+            for uid_norm in pod_uid_candidates:
+                if uid_norm in pod_uid_map:
+                    uid_info = pod_uid_map[uid_norm]
+                    pod_name = uid_info.get("pod_name")
+                    namespace = namespace or uid_info.get("namespace")
+                    deployment = deployment or uid_info.get("deployment")
+                    provenance_parts.append(uid_info.get("provenance") or "pod_uid_map")
+                    confidence = max(confidence, 0.8)
+                    break
+
+        if not container_name and deployment:
+            container_name = normalize_entity_name(deployment)
+            provenance_parts.append("k8s_snapshot:deployment_fallback")
+            confidence = max(confidence, 0.9)
+
+        if not container_name and pod_name:
+            container_name = normalize_entity_name(pod_name)
+            provenance_parts.append("k8s_snapshot:pod_fallback")
+            confidence = max(confidence, 0.85)
+
+        # If no mapping identity is available, prefer existing human label.
         if not container_name:
-            # if entity_name looks human (not hash) use it
             if not is_hash_like(str(row.get("entity_name") or "")):
                 container_name = normalize_entity_name(row.get("entity_name"))
                 provenance_parts.append("source_label")
@@ -266,6 +455,10 @@ def reconcile_entities(
             else:
                 confidence = max(confidence, 0.5)
 
+        container_name_hint = normalize_entity_name(info.get("container_name")) if info else None
+        if not container_name_hint:
+            container_name_hint = normalize_entity_name(metric.get("container_name") or metric.get("container"))
+
         identity_type = "raw_label"
         resolution_status = "resolved"
         if cid and is_hash_like(container_name) and container_name == cid:
@@ -273,7 +466,7 @@ def reconcile_entities(
             resolution_status = "unresolved"
         elif cid:
             identity_type = "container_id"
-            resolution_status = "reconciled"
+            resolution_status = "resolved"
         elif is_hash_like(container_name):
             identity_type = "short_container_id_candidate"
             resolution_status = "unresolved"
@@ -281,7 +474,9 @@ def reconcile_entities(
         row["canonical_entity_name"] = container_name
         row["container_id"] = cid
         row["pod_name"] = pod_name
+        row["pod_namespace"] = namespace
         row["deployment_name"] = deployment
+        row["container_name_hint"] = container_name_hint
         row["reconciliation_provenance"] = ",".join([p for p in provenance_parts if p])
         row["reconciliation_confidence"] = float(confidence)
         row["identity_type"] = identity_type
@@ -482,6 +677,14 @@ def build_service_catalog(metadata: Dict[str, Any], attribution_config: Dict[str
         for item in deployments
         if isinstance(item, dict) and item.get("name")
     }
+    deployment_namespaces = {
+        normalize_entity_name(item.get("namespace"))
+        for item in deployments
+        if isinstance(item, dict) and item.get("namespace")
+    }
+    namespace_override = normalize_entity_name(metadata.get("deployment", {}).get("namespace_override")) if isinstance(metadata, dict) else ""
+    if namespace_override:
+        deployment_namespaces.add(namespace_override)
     primary_services = {
         normalize_entity_name(name) for name in sut_containers if normalize_entity_name(name)
     }
@@ -508,6 +711,7 @@ def build_service_catalog(metadata: Dict[str, Any], attribution_config: Dict[str
 
     return {
         "deployment_names": deployment_names,
+        "deployment_namespaces": deployment_namespaces,
         "primary_services": primary_services,
         "group_index": group_index,
         "overrides": overrides,
@@ -738,6 +942,52 @@ def parse_prometheus_payload(payload: Dict[str, Any], label_name: str) -> List[D
     return series
 
 
+def parse_cpu_k8s_by_id_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Parse cpu_k8s_by_id payload into cgroup-aware modeled candidates."""
+    series: List[Dict[str, Any]] = []
+    results = payload.get("data", {}).get("result", []) if isinstance(payload, dict) else []
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        metric = result.get("metric", {}) if isinstance(result.get("metric"), dict) else {}
+        cgroup_id = metric.get("id")
+        if not cgroup_id:
+            continue
+        points = result.get("values", [])
+        series.append(
+            {
+                "entity_name": normalize_entity_name(cgroup_id),
+                "raw_entity_name": cgroup_id,
+                "metric": metric,
+                "points": points,
+                "stats": summarize_series(points),
+                "integrated_value": integrate_series(points),
+            }
+        )
+    return series
+
+
+def compact_entity_name_for_output(model_variant: str, row: Dict[str, Any]) -> str:
+    """Build compact M2 identity while leaving raw_entity_name unchanged."""
+    base = normalize_entity_name(row.get("entity_name"))
+    if model_variant != MODEL_M2:
+        return base
+
+    deployment_name = normalize_entity_name(row.get("deployment_name"))
+    pod_name = normalize_entity_name(row.get("pod_name"))
+    container_name_hint = normalize_entity_name(row.get("container_name_hint"))
+
+    if deployment_name and container_name_hint:
+        return f"{deployment_name}/{container_name_hint}"
+    if pod_name and container_name_hint:
+        return f"{pod_name}/{container_name_hint}"
+    if deployment_name and pod_name:
+        return f"{deployment_name}/{pod_name}"
+    if pod_name:
+        return pod_name
+    return base
+
+
 def build_container_rows(
     model_variant: str,
     series_rows: Sequence[Dict[str, Any]],
@@ -752,6 +1002,50 @@ def build_container_rows(
     total_weight = 0.0
     for row in series_rows:
         classification = classify_entity(row.get("entity_name"), catalog)
+
+        pod_namespace = normalize_entity_name(row.get("pod_namespace"))
+        deployment_name = normalize_entity_name(row.get("deployment_name"))
+        pod_name = normalize_entity_name(row.get("pod_name"))
+        has_k8s_identity = bool(pod_namespace or deployment_name or pod_name)
+        if (
+            (pod_namespace and pod_namespace in catalog.get("deployment_namespaces", set()))
+            or (deployment_name and deployment_name in catalog.get("deployment_names", set()))
+        ):
+            fallback_service_name = deployment_name or next(iter(catalog.get("deployment_names", set())), None) or normalize_entity_name(row.get("entity_name"))
+            classification = {
+                **classification,
+                "service_name": fallback_service_name,
+                "service_group": PRIMARY_GROUP,
+                "scope_category": PRIMARY_GROUP,
+                "in_scope": True,
+                "ignored": False,
+                "match_status": "k8s_snapshot_scope_match",
+                "confidence": max(0.95, safe_float(classification.get("confidence")) or 0.0),
+                "provenance": "k8s_snapshot_uid_containerid_match",
+            }
+        elif has_k8s_identity:
+            inferred_service_name = deployment_name or pod_name or normalize_entity_name(row.get("entity_name"))
+            inferred_service_group = UNKNOWN_GROUP
+            inferred_scope_category = UNKNOWN_GROUP
+            if pod_namespace in {"kube-system", "kube-public", "kube-node-lease"}:
+                inferred_service_group = SYSTEM_GROUP
+                inferred_scope_category = SYSTEM_GROUP
+            elif pod_namespace == "kepler":
+                inferred_service_group = MEASUREMENT_GROUP
+                inferred_scope_category = MEASUREMENT_GROUP
+
+            classification = {
+                **classification,
+                "service_name": inferred_service_name,
+                "service_group": inferred_service_group,
+                "scope_category": inferred_scope_category,
+                "in_scope": False,
+                "ignored": classification.get("ignored", False),
+                "match_status": "k8s_snapshot_non_sut_scope_match",
+                "confidence": max(0.8, safe_float(classification.get("confidence")) or 0.0),
+                "provenance": "k8s_snapshot_uid_containerid_match",
+            }
+
         weight_value = row.get(weight_field) if weight_field else row.get("integrated_value")
         weight = safe_float(weight_value)
         if weight is None:
@@ -807,7 +1101,7 @@ def build_container_rows(
         output_rows.append(
             {
                 "model_variant": model_variant,
-                "entity_name": row.get("entity_name"),
+                "entity_name": compact_entity_name_for_output(model_variant, row),
                 "raw_entity_name": row.get("raw_entity_name"),
                 "scope_category": row.get("scope_category"),
                 "in_scope": row.get("in_scope"),
@@ -822,6 +1116,7 @@ def build_container_rows(
                 "resolution_status": row.get("resolution_status"),
                 "container_id": row.get("container_id"),
                 "pod_name": row.get("pod_name"),
+                "pod_namespace": row.get("pod_namespace"),
                 "deployment_name": row.get("deployment_name"),
                 "ignored": row.get("ignored"),
                 "source_artifact": source_artifact,
@@ -943,6 +1238,10 @@ def load_run_artifacts(run_dir: Path) -> Dict[str, Any]:
     if not isinstance(kube_pod_container_info, dict):
         kube_pod_container_info = {}
 
+    k8s_pod_snapshot = load_json(run_dir / "k8s_pod_snapshot.json", default={})
+    if not isinstance(k8s_pod_snapshot, dict):
+        k8s_pod_snapshot = {}
+
     query_info = load_json(run_dir / "query_info.json", default={})
     if not isinstance(query_info, dict):
         query_info = {}
@@ -954,6 +1253,7 @@ def load_run_artifacts(run_dir: Path) -> Dict[str, Any]:
         "cpu_k8s_by_id_payload": cpu_k8s_by_id_payload,
         "kube_pod_info": kube_pod_info,
         "kube_pod_container_info": kube_pod_container_info,
+        "k8s_pod_snapshot": k8s_pod_snapshot,
         "query_info": query_info,
     }
 
@@ -1118,6 +1418,154 @@ def summarize_m2_comparison(
     }
 
 
+def _set_with_prefix_match(candidates: Iterable[str], known_values: Iterable[str]) -> Tuple[set, set]:
+    known = {str(value).lower() for value in known_values if value}
+    matched = set()
+    unmatched = set()
+    for candidate in {str(value).lower() for value in candidates if value}:
+        found = False
+        for known_value in known:
+            if known_value.startswith(candidate) or candidate.startswith(known_value):
+                found = True
+                break
+        if found:
+            matched.add(candidate)
+        else:
+            unmatched.add(candidate)
+    return matched, unmatched
+
+
+def build_enrichment_diagnostics(
+    artifacts: Dict[str, Any],
+    metadata: Dict[str, Any],
+    model_m1: Dict[str, Any],
+    model_m2: Dict[str, Any],
+) -> Dict[str, Any]:
+    snapshot = artifacts.get("k8s_pod_snapshot", {})
+    snapshot_loaded = bool(isinstance(snapshot, dict) and snapshot.get("items"))
+    snapshot_items = snapshot.get("items", []) if isinstance(snapshot, dict) else []
+
+    namespaces = sorted(
+        {
+            normalize_entity_name(item.get("metadata", {}).get("namespace"))
+            for item in snapshot_items
+            if isinstance(item, dict)
+            and isinstance(item.get("metadata"), dict)
+            and item.get("metadata", {}).get("namespace")
+        }
+    )
+
+    sut_namespaces = set()
+    deployment_info = metadata.get("deployment", {}) if isinstance(metadata, dict) else {}
+    if isinstance(deployment_info, dict):
+        namespace_override = normalize_entity_name(deployment_info.get("namespace_override"))
+        if namespace_override:
+            sut_namespaces.add(namespace_override)
+        for deployment in deployment_info.get("deployments", []):
+            if isinstance(deployment, dict):
+                namespace = normalize_entity_name(deployment.get("namespace"))
+                if namespace:
+                    sut_namespaces.add(namespace)
+
+    sut_pods_detected = []
+    for item in snapshot_items:
+        if not isinstance(item, dict):
+            continue
+        item_metadata = item.get("metadata", {}) if isinstance(item.get("metadata"), dict) else {}
+        namespace = normalize_entity_name(item_metadata.get("namespace"))
+        if namespace and sut_namespaces and namespace not in sut_namespaces:
+            continue
+        pod_name = normalize_entity_name(item_metadata.get("name"))
+        if pod_name:
+            sut_pods_detected.append(f"{namespace}/{pod_name}" if namespace else pod_name)
+    sut_pods_detected = sorted(set(sut_pods_detected))
+
+    container_hex_map, pod_uid_map = build_k8s_snapshot_indexes(snapshot if isinstance(snapshot, dict) else {})
+
+    cpu_k8s_results = artifacts.get("cpu_k8s_by_id_payload", {}).get("data", {}).get("result", [])
+    cpu_pod_uids = set()
+    cpu_container_ids = set()
+    if isinstance(cpu_k8s_results, list):
+        for result in cpu_k8s_results:
+            if not isinstance(result, dict):
+                continue
+            metric = result.get("metric", {}) if isinstance(result.get("metric"), dict) else {}
+            for metric_value in metric.values():
+                cpu_pod_uids.update(extract_pod_uid_candidates(metric_value))
+                cpu_container_ids.update(extract_containerd_scope_ids(metric_value))
+
+    matched_pod_uids = sorted(uid for uid in cpu_pod_uids if uid in pod_uid_map)
+    unmatched_pod_uids = sorted(uid for uid in cpu_pod_uids if uid not in pod_uid_map)
+
+    matched_container_ids, unmatched_container_ids = _set_with_prefix_match(
+        cpu_container_ids,
+        container_hex_map.keys(),
+    )
+
+    all_rows = []
+    all_rows.extend(model_m1.get("container_rows", []) if isinstance(model_m1, dict) else [])
+    all_rows.extend(model_m2.get("container_rows", []) if isinstance(model_m2, dict) else [])
+
+    enriched_rows_count = 0
+    for row in all_rows:
+        if not isinstance(row, dict):
+            continue
+        if row.get("pod_name") or row.get("pod_namespace") or row.get("deployment_name"):
+            enriched_rows_count += 1
+
+    cpu_by_container_payload = artifacts.get("cpu_by_container_payload", {})
+    cpu_by_container_series = cpu_by_container_payload.get("data", {}).get("result", []) if isinstance(cpu_by_container_payload, dict) else []
+    energy_payload = artifacts.get("energy_payload", {})
+    energy_series = energy_payload.get("data", {}).get("result", []) if isinstance(energy_payload, dict) else []
+
+    m2_source = "none"
+    if cpu_k8s_results:
+        m2_source = "cpu_k8s_by_id.json"
+    elif cpu_by_container_series:
+        m2_source = "cpu_by_container.json"
+
+    input_sources_used = {
+        "energy": {
+            "artifact": "energy.json",
+            "series_count": len(energy_series) if isinstance(energy_series, list) else 0,
+            "label_basis": "container_name",
+            "contains_cgroup_ids": False,
+        },
+        "cpu_by_container": {
+            "artifact": "cpu_by_container.json",
+            "series_count": len(cpu_by_container_series) if isinstance(cpu_by_container_series, list) else 0,
+            "label_basis": "container_name",
+            "contains_cgroup_ids": False,
+        },
+        "cpu_k8s_by_id": {
+            "artifact": "cpu_k8s_by_id.json",
+            "series_count": len(cpu_k8s_results) if isinstance(cpu_k8s_results, list) else 0,
+            "label_basis": "id",
+            "contains_cgroup_ids": True,
+        },
+        "k8s_snapshot": {
+            "artifact": "k8s_pod_snapshot.json",
+            "loaded": snapshot_loaded,
+            "pod_count": len(snapshot_items),
+        },
+        "m2_selected_source": m2_source,
+    }
+
+    return {
+        "k8s_snapshot_loaded": snapshot_loaded,
+        "k8s_snapshot_pod_count": len(snapshot_items),
+        "k8s_snapshot_namespaces": namespaces,
+        "sut_pods_detected": sut_pods_detected,
+        "pod_uid_matches_found": len(matched_pod_uids),
+        "container_id_matches_found": len(matched_container_ids),
+        "enriched_rows_count": enriched_rows_count,
+        "unenriched_rows_count": max(0, len(all_rows) - enriched_rows_count),
+        "unmatched_pod_uids": unmatched_pod_uids,
+        "unmatched_container_ids": sorted(unmatched_container_ids),
+        "attribution_input_sources_used": input_sources_used,
+    }
+
+
 def build_attribution_report(run_dir: Path, output_dir: Optional[Path] = None) -> Dict[str, Any]:
     artifacts = load_run_artifacts(run_dir)
     metadata = artifacts["metadata"]
@@ -1149,13 +1597,13 @@ def build_attribution_report(run_dir: Path, output_dir: Optional[Path] = None) -
     cpu_series: List[Dict[str, Any]] = []
     cpu_source_artifact = None
     cpu_source_metric = None
-    if artifacts["cpu_by_container_payload"]:
+    if artifacts["cpu_k8s_by_id_payload"]:
+        cpu_series = parse_cpu_k8s_by_id_payload(artifacts["cpu_k8s_by_id_payload"])
+        cpu_source_artifact = "cpu_k8s_by_id.json"
+        cpu_source_metric = MODEL_M2_SOURCE
+    elif artifacts["cpu_by_container_payload"]:
         cpu_series = parse_prometheus_payload(artifacts["cpu_by_container_payload"], "container_name")
         cpu_source_artifact = "cpu_by_container.json"
-        cpu_source_metric = MODEL_M2_SOURCE
-    elif artifacts["cpu_k8s_by_id_payload"]:
-        cpu_series = parse_prometheus_payload(artifacts["cpu_k8s_by_id_payload"], "id")
-        cpu_source_artifact = "cpu_k8s_by_id.json"
         cpu_source_metric = MODEL_M2_SOURCE
 
     # Reconcile identities across energy and CPU series using kube payloads when available
@@ -1165,6 +1613,7 @@ def build_attribution_report(run_dir: Path, output_dir: Optional[Path] = None) -
         cpu_k8s_payload=artifacts.get("cpu_k8s_by_id_payload", {}),
         kube_pod_info=artifacts.get("kube_pod_info", {}),
         kube_pod_container_info=artifacts.get("kube_pod_container_info", {}),
+        k8s_pod_snapshot=artifacts.get("k8s_pod_snapshot", {}),
         metadata=metadata,
     )
 
@@ -1227,6 +1676,12 @@ def build_attribution_report(run_dir: Path, output_dir: Optional[Path] = None) -
 
     m1_unknown_summary = summarize_unknown_energy(model_m1["container_rows"])
     m2_comparison_summary = summarize_m2_comparison(model_m1, model_m2, catalog)
+    enrichment_diagnostics = build_enrichment_diagnostics(
+        artifacts=artifacts,
+        metadata=metadata,
+        model_m1=model_m1,
+        model_m2=model_m2,
+    )
 
     if not m2_comparison_summary["m2_valid_for_comparison"]:
         warnings.append(
@@ -1236,6 +1691,48 @@ def build_attribution_report(run_dir: Path, output_dir: Optional[Path] = None) -
                 m2_cpu_coverage_ratio=m2_comparison_summary["m2_cpu_coverage_ratio"],
                 m2_entity_count=m2_comparison_summary["m2_entity_count"],
                 m2_missing_energy_entities=m2_comparison_summary["m2_missing_energy_entities"],
+            )
+        )
+
+    m1_rows = model_m1.get("container_rows", []) if isinstance(model_m1, dict) else []
+    m2_rows = model_m2.get("container_rows", []) if isinstance(model_m2, dict) else []
+
+    m1_identity_limited = not any(
+        (row.get("pod_name") or row.get("pod_namespace") or row.get("deployment_name"))
+        for row in m1_rows
+        if isinstance(row, dict)
+    )
+    m1_not_valid_for_sut_service_attribution = bool(
+        m1_identity_limited
+        or (model_m1.get("coverage", {}).get("scope_container_count", 0) == 0)
+    )
+
+    m2_cgroup_enriched = bool(
+        model_m2.get("source_artifact") == "cpu_k8s_by_id.json"
+        and any(
+            (row.get("pod_name") or row.get("pod_namespace") or row.get("deployment_name"))
+            for row in m2_rows
+            if isinstance(row, dict)
+        )
+    )
+    m2_valid_for_sut_resource_attribution = bool(
+        m2_cgroup_enriched and (model_m2.get("coverage", {}).get("scope_container_count", 0) > 0)
+    )
+
+    if m1_not_valid_for_sut_service_attribution:
+        warnings.append(
+            build_warning(
+                "m1_identity_limited",
+                "M1 Kepler direct series are identity-limited and not valid for SUT service-level attribution",
+                m1_identity_limited=m1_identity_limited,
+            )
+        )
+    if not m2_valid_for_sut_resource_attribution:
+        warnings.append(
+            build_warning(
+                "m2_not_valid_for_sut_resource_attribution",
+                "M2 cgroup-aware resource attribution did not achieve sufficient SUT-scoped enriched coverage",
+                m2_cgroup_enriched=m2_cgroup_enriched,
             )
         )
 
@@ -1270,6 +1767,7 @@ def build_attribution_report(run_dir: Path, output_dir: Optional[Path] = None) -
         "raw_entity_name",
         "container_id",
         "pod_name",
+        "pod_namespace",
         "deployment_name",
         "service_name",
         "service_group",
@@ -1333,6 +1831,7 @@ def build_attribution_report(run_dir: Path, output_dir: Optional[Path] = None) -
             "cpu_by_container.json": "cpu_by_container.json" if (run_dir / "cpu_by_container.json").exists() else None,
             "cpu_k8s_by_id.json": "cpu_k8s_by_id.json" if (run_dir / "cpu_k8s_by_id.json").exists() else None,
             "query_info.json": "query_info.json" if (run_dir / "query_info.json").exists() else None,
+            "k8s_pod_snapshot.json": "k8s_pod_snapshot.json" if (run_dir / "k8s_pod_snapshot.json").exists() else None,
             "locust_stats.csv": "locust_stats.csv" if (run_dir / "locust_stats.csv").exists() else None,
             "physical_power_meter.csv": "physical_power_meter.csv" if (run_dir / "physical_power_meter.csv").exists() else None,
         },
@@ -1347,8 +1846,9 @@ def build_attribution_report(run_dir: Path, output_dir: Optional[Path] = None) -
             "mapping_strategy": "metadata_deployment_names_plus_overrides",
             "reconciliation_notes": [
                 "Kepler energy labels for unresolved entities are short hex container-like IDs present in energy.json and summary.json.",
-                "Those IDs do not appear in cpu_by_container.json, cpu_k8s_by_id.json, or any kube pod/container artifact in this run.",
-                "They are therefore retained as unresolved short_container_id_candidate identities with explicit provenance and confidence.",
+                "Reconciliation now also consumes k8s_pod_snapshot.json captured via kubectl get pods -A -o json during each run.",
+                "Snapshot matching uses pod<normalized_uid> and cri-containerd-<container_id>.scope patterns to enrich namespace/pod/deployment mapping.",
+                "Any IDs still unresolved after snapshot + telemetry matching are retained as short_container_id_candidate identities with explicit provenance/confidence.",
             ],
         },
         "workload": workload_context,
@@ -1383,6 +1883,11 @@ def build_attribution_report(run_dir: Path, output_dir: Optional[Path] = None) -
         "m2_entity_count": m2_comparison_summary["m2_entity_count"],
         "m2_missing_energy_entities": m2_comparison_summary["m2_missing_energy_entities"],
         "m2_valid_for_comparison": m2_comparison_summary["m2_valid_for_comparison"],
+        "m1_identity_limited": m1_identity_limited,
+        "m1_not_valid_for_sut_service_attribution": m1_not_valid_for_sut_service_attribution,
+        "m2_cgroup_enriched": m2_cgroup_enriched,
+        "m2_valid_for_sut_resource_attribution": m2_valid_for_sut_resource_attribution,
+        "enrichment_diagnostics": enrichment_diagnostics,
         "totals": {
             "total_direct_energy_joules": model_m1.get("coverage", {}).get("scope_energy_joules"),
             "total_mapped_energy_joules": model_m1.get("coverage", {}).get("mapped_energy_joules"),

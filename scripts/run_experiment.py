@@ -295,6 +295,36 @@ def prepare_run_directory(run_dir=None):
     return create_runs_directory()
 
 
+def capture_k8s_pod_snapshot(run_dir):
+    """Capture a best-effort Kubernetes pod snapshot for attribution enrichment."""
+    snapshot_path = Path(run_dir) / "k8s_pod_snapshot.json"
+    cmd = ["kubectl", "get", "pods", "-A", "-o", "json"]
+    try:
+        logger.info("Capturing Kubernetes pod snapshot")
+        completed = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        # Validate JSON before writing so attribution can rely on a consistent payload.
+        payload = json.loads(completed.stdout)
+        with snapshot_path.open("w", encoding="utf-8") as outfile:
+            json.dump(payload, outfile, indent=2)
+        return {
+            "captured": True,
+            "path": str(snapshot_path),
+            "error": None,
+        }
+    except (subprocess.CalledProcessError, OSError, json.JSONDecodeError) as exc:
+        logger.warning("Could not capture Kubernetes pod snapshot: %s", exc)
+        return {
+            "captured": False,
+            "path": str(snapshot_path),
+            "error": str(exc),
+        }
+
+
 def save_metadata(
     runs_dir,
     app_path,
@@ -712,6 +742,8 @@ def main():
                 "sut_name": infer_sut_name(args.app, filtered_manifests),
                 "deployments": deployment_targets,
             }
+
+            metadata["k8s_pod_snapshot"] = capture_k8s_pod_snapshot(runs_dir)
             with metadata_file.open("w", encoding="utf-8") as outfile:
                 json.dump(metadata, outfile, indent=2)
             
