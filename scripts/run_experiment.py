@@ -9,6 +9,7 @@ import argparse
 import csv
 import json
 import logging
+import requests
 import subprocess
 import sys
 import time
@@ -32,6 +33,76 @@ logger = logging.getLogger(__name__)
 MANAGE_SUT_SCRIPT = Path(__file__).resolve().parent / "manage_sut.py"
 POWER_METER_SAMPLER_SCRIPT = Path(__file__).resolve().parent / "sample_power_meter.py"
 DEFAULT_MAX_ERROR_RATE = 0.01
+
+
+def read_prometheus_unix_time(prom_url, timeout_seconds=5.0):
+    """Read current Prometheus server time as UNIX seconds."""
+    response = requests.get(
+        f"{prom_url.rstrip('/')}/api/v1/query",
+        params={"query": "time()"},
+        timeout=timeout_seconds,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data", {}) if isinstance(payload, dict) else {}
+    result_type = data.get("resultType")
+    result = data.get("result")
+
+    if result_type == "scalar" and isinstance(result, list) and len(result) >= 2:
+        return float(result[1])
+
+    if result_type == "vector" and isinstance(result, list) and result:
+        first = result[0]
+        if isinstance(first, dict) and isinstance(first.get("value"), list) and len(first["value"]) >= 2:
+            return float(first["value"][1])
+
+    raise ValueError(f"Unexpected Prometheus time() payload: resultType={result_type!r}")
+
+
+class ExperimentTimeSource:
+    """Provide a consistent wall clock, optionally aligned to Prometheus time."""
+
+    def __init__(self, prom_url=None):
+        self.prom_url = prom_url
+        self.source = "local_clock"
+        self.offset_seconds = 0.0
+        self.error = None
+
+        if not prom_url:
+            return
+
+        try:
+            prom_now = read_prometheus_unix_time(prom_url)
+            local_now = time.time()
+            self.offset_seconds = prom_now - local_now
+            self.source = "prometheus_clock"
+            logger.info(
+                "Using Prometheus clock as time source (offset_seconds=%.3f)",
+                self.offset_seconds,
+            )
+        except (requests.RequestException, ValueError, TypeError) as exc:
+            self.error = str(exc)
+            logger.warning(
+                "Could not use Prometheus clock, falling back to local clock: %s",
+                exc,
+            )
+
+    def now_unix(self):
+        return time.time() + self.offset_seconds
+
+    def now_datetime(self):
+        return datetime.fromtimestamp(self.now_unix())
+
+    def now_iso(self):
+        return self.now_datetime().isoformat()
+
+    def to_metadata(self):
+        return {
+            "source": self.source,
+            "prom_url": self.prom_url,
+            "offset_seconds": self.offset_seconds,
+            "error": self.error,
+        }
 
 
 def load_workload(workload_path):
@@ -275,16 +346,17 @@ def normalize_max_error_rate(cli_value, workload):
     return max_error_rate
 
 
-def create_runs_directory():
+def create_runs_directory(time_source=None):
     """Create timestamped runs directory and return its path."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    now_dt = time_source.now_datetime() if time_source is not None else datetime.now()
+    timestamp = now_dt.strftime("%Y%m%d_%H%M%S_%f")
     runs_dir = Path("runs") / timestamp
     runs_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Created runs directory: {runs_dir}")
     return runs_dir
 
 
-def prepare_run_directory(run_dir=None):
+def prepare_run_directory(run_dir=None, time_source=None):
     """Create a run directory, using a caller-supplied path when provided."""
     if run_dir:
         run_path = Path(run_dir)
@@ -292,7 +364,7 @@ def prepare_run_directory(run_dir=None):
         logger.info(f"Using provided run directory: {run_path}")
         return run_path
 
-    return create_runs_directory()
+    return create_runs_directory(time_source=time_source)
 
 
 def capture_k8s_pod_snapshot(run_dir):
@@ -342,6 +414,7 @@ def save_metadata(
     locust_observed_error_rate=None,
     locust_max_error_rate=None,
     locust_error_rate_threshold_exceeded=None,
+    time_source=None,
 ):
     """Save experiment metadata to JSON file."""
     metadata = {
@@ -367,6 +440,8 @@ def save_metadata(
     }
     if power_meter is not None:
         metadata["power_meter"] = power_meter
+    if time_source is not None:
+        metadata["time_source"] = time_source
     
     metadata_file = runs_dir / "metadata.json"
     with open(metadata_file, 'w') as f:
@@ -469,6 +544,10 @@ def main():
         ),
     )
     parser.add_argument(
+        "--prom-url",
+        help="Optional Prometheus URL used as authoritative time source",
+    )
+    parser.add_argument(
         "--power-meter-url",
         help="Optional physical power meter API URL for CSV sampling"
     )
@@ -490,8 +569,9 @@ def main():
     
     try:
         # Record experiment start
+        time_source = ExperimentTimeSource(args.prom_url)
         timestamps = {
-            'experiment_start': datetime.now().isoformat()
+            'experiment_start': time_source.now_iso()
         }
         logger.info("=" * 60)
         logger.info("Starting energy analysis experiment")
@@ -560,8 +640,9 @@ def main():
         locust_artifacts = {}
         power_meter_artifacts = None
         power_meter_process = None
+        k8s_snapshot_status = None
         if not args.no_results:
-            runs_dir = prepare_run_directory(args.run_dir)
+            runs_dir = prepare_run_directory(args.run_dir, time_source=time_source)
             locust_csv_prefix = runs_dir / "locust"
             locust_artifacts = {
                 "stats_csv": str(runs_dir / "locust_stats.csv"),
@@ -569,6 +650,8 @@ def main():
                 "failures_csv": str(runs_dir / "locust_failures.csv"),
                 "exceptions_csv": str(runs_dir / "locust_exceptions.csv"),
             }
+            # Capture snapshot while SUT is active, before workload execution.
+            k8s_snapshot_status = capture_k8s_pod_snapshot(runs_dir)
             if args.power_meter_url:
                 power_meter_artifacts = {
                     "enabled": True,
@@ -609,7 +692,7 @@ def main():
         wait_baseline(baseline_seconds)
 
         # Record workload start
-        workload_start_dt = datetime.now()
+        workload_start_dt = time_source.now_datetime()
         timestamps['workload_start'] = workload_start_dt.isoformat()
         effective_start_dt = workload_start_dt + timedelta(seconds=ramp_exclusion_seconds)
         timestamps['workload_effective_start'] = effective_start_dt.isoformat()
@@ -649,7 +732,7 @@ def main():
                 )
         
         # Record workload end
-        timestamps['workload_end'] = datetime.now().isoformat()
+        timestamps['workload_end'] = time_source.now_iso()
 
         if not args.no_results and locust_artifacts.get("stats_csv"):
             locust_observed_error_rate = read_locust_error_rate(locust_artifacts["stats_csv"])
@@ -715,6 +798,7 @@ def main():
                 locust_observed_error_rate=locust_observed_error_rate,
                 locust_max_error_rate=max_error_rate,
                 locust_error_rate_threshold_exceeded=locust_error_rate_threshold_exceeded,
+                time_source=time_source.to_metadata(),
             )
 
             metadata_file = runs_dir / "metadata.json"
@@ -743,10 +827,7 @@ def main():
                 "deployments": deployment_targets,
             }
 
-            # Capture Kubernetes pod snapshot before workload execution
-            metadata["k8s_pod_snapshot"] = capture_k8s_pod_snapshot(runs_dir)
-
-            metadata["k8s_pod_snapshot"] = capture_k8s_pod_snapshot(runs_dir)
+            metadata["k8s_pod_snapshot"] = k8s_snapshot_status
             with metadata_file.open("w", encoding="utf-8") as outfile:
                 json.dump(metadata, outfile, indent=2)
             

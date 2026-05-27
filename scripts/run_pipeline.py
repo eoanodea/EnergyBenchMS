@@ -90,6 +90,12 @@ def append_locust_quality_overrides(command, args):
         command.extend(["--max-error-rate", str(args.max_error_rate)])
 
 
+def append_prometheus_override(command, args):
+    """Append Prometheus URL for run_experiment time alignment."""
+    if args.prom_url:
+        command.extend(["--prom-url", args.prom_url])
+
+
 def build_power_meter_config(args):
     """Create a serializable power meter config block when enabled."""
     if not args.power_meter_url:
@@ -698,6 +704,7 @@ def main():
         ]
         append_baseline_override(warmup_cmd, args)
         append_locust_quality_overrides(warmup_cmd, args)
+        append_prometheus_override(warmup_cmd, args)
         append_deployment_overrides(warmup_cmd, args)
         run_step(warmup_cmd, "Running warmup")
 
@@ -754,6 +761,7 @@ def main():
             ]
             append_baseline_override(run_experiment_cmd, args)
             append_locust_quality_overrides(run_experiment_cmd, args)
+            append_prometheus_override(run_experiment_cmd, args)
             append_deployment_overrides(run_experiment_cmd, args)
             append_power_meter_overrides(run_experiment_cmd, args)
             completed = run_step(run_experiment_cmd, "Running saturation level")
@@ -865,6 +873,7 @@ def main():
                 ]
                 append_baseline_override(warmup_cmd, args)
                 append_locust_quality_overrides(warmup_cmd, args)
+                append_prometheus_override(warmup_cmd, args)
                 if workload_level.get("spawn_rate") is not None:
                     warmup_cmd.extend(["--spawn-rate", str(workload_level["spawn_rate"])])
                 if workload_level.get("duration") is not None:
@@ -898,6 +907,7 @@ def main():
                     ]
                     append_baseline_override(run_experiment_cmd, args)
                     append_locust_quality_overrides(run_experiment_cmd, args)
+                    append_prometheus_override(run_experiment_cmd, args)
                     if workload_level.get("spawn_rate") is not None:
                         run_experiment_cmd.extend(["--spawn-rate", str(workload_level["spawn_rate"])])
                     if workload_level.get("duration") is not None:
@@ -956,6 +966,7 @@ def main():
             ]
             append_baseline_override(warmup_cmd, args)
             append_locust_quality_overrides(warmup_cmd, args)
+            append_prometheus_override(warmup_cmd, args)
             append_deployment_overrides(warmup_cmd, args)
             run_step(warmup_cmd, "Running warmup")
             manage_sut_down(args.app, args.cooldown_seconds, args)
@@ -977,6 +988,7 @@ def main():
                 ]
                 append_baseline_override(run_experiment_cmd, args)
                 append_locust_quality_overrides(run_experiment_cmd, args)
+                append_prometheus_override(run_experiment_cmd, args)
                 append_deployment_overrides(run_experiment_cmd, args)
                 append_power_meter_overrides(run_experiment_cmd, args)
                 completed = run_step(run_experiment_cmd, "Running experiment")
