@@ -743,6 +743,9 @@ def main():
                 "deployments": deployment_targets,
             }
 
+            # Capture Kubernetes pod snapshot before workload execution
+            metadata["k8s_pod_snapshot"] = capture_k8s_pod_snapshot(runs_dir)
+
             metadata["k8s_pod_snapshot"] = capture_k8s_pod_snapshot(runs_dir)
             with metadata_file.open("w", encoding="utf-8") as outfile:
                 json.dump(metadata, outfile, indent=2)
