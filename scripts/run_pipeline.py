@@ -28,6 +28,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 MANAGE_SUT_SCRIPT = SCRIPT_DIR / "manage_sut.py"
 SATURATION_ANALYSE_SCRIPT = SCRIPT_DIR / "saturation_analyse.py"
+BATCH_ATTRIBUTION_POSTPROCESS_SCRIPT = SCRIPT_DIR / "batch_attribution_postprocess.py"
 
 
 def run_step(command, description):
@@ -1017,6 +1018,16 @@ def main():
 
                 cleanup_sleep = args.cooldown_seconds if index < args.count else 0
                 manage_sut_down(args.app, cleanup_sleep, args)
+
+    if created_runs:
+        print("=== Attribution post-process ===")
+        attribution_cmd = [
+            sys.executable,
+            str(BATCH_ATTRIBUTION_POSTPROCESS_SCRIPT),
+            "--batch-dir",
+            str(batch_dir),
+        ]
+        run_step(attribution_cmd, "Generating attribution artifacts")
 
     visualise_cmd = [
         sys.executable,
