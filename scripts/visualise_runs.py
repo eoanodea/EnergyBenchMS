@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Generate an HTML dashboard focused on workload-level run comparison."""
 
+
+
 import argparse
 import csv
 import json
+import math
 import statistics
 from datetime import datetime
 from pathlib import Path
@@ -21,37 +24,37 @@ SUT_CONTAINERS = [
 
 # Exclude infrastructure services from application-focused energy analysis.
 EXCLUDED_CONTAINERS = {
-    "kepler",
-    "coredns",
-    "metrics-server",
-    "traefik",
-    "local-path-provisioner",
+  "kepler",
+  "coredns",
+  "metrics-server",
+  "traefik",
+  "local-path-provisioner",
 }
 
 DEFAULT_LEVEL_ORDER = ["low", "medium", "high"]
 
 
 def load_json(path):
-    path = Path(path)
-    if not path.exists():
-        return None
-    with path.open("r", encoding="utf-8") as infile:
-        return json.load(infile)
+  path = Path(path)
+  if not path.exists():
+    return None
+  with path.open("r", encoding="utf-8") as infile:
+    return json.load(infile)
 
 
 def load_csv_rows(path):
-    path = Path(path)
-    if not path.exists():
-        return []
-    with path.open("r", encoding="utf-8", newline="") as infile:
-        return list(csv.DictReader(infile))
+  path = Path(path)
+  if not path.exists():
+    return []
+  with path.open("r", encoding="utf-8", newline="") as infile:
+    return list(csv.DictReader(infile))
 
 
 def parse_float(value):
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+  try:
+    return float(value)
+  except (TypeError, ValueError):
+    return None
 
 
 def joules_to_wh(value):
@@ -61,120 +64,150 @@ def joules_to_wh(value):
 
 
 def parse_duration_seconds(metadata):
-    if not metadata:
-        return None
+  if not metadata:
+    return None
 
-    timestamps = metadata.get("timestamps", {})
-    start = timestamps.get("workload_effective_start") or timestamps.get("workload_start")
-    end = timestamps.get("workload_end")
-    if not start or not end:
-        return None
+  timestamps = metadata.get("timestamps", {})
+  start = timestamps.get("workload_effective_start") or timestamps.get("workload_start")
+  end = timestamps.get("workload_end")
+  if not start or not end:
+    return None
 
-    try:
-        start_dt = datetime.fromisoformat(start)
-        end_dt = datetime.fromisoformat(end)
-    except ValueError:
-        return None
+  try:
+    start_dt = datetime.fromisoformat(start)
+    end_dt = datetime.fromisoformat(end)
+  except ValueError:
+    return None
 
-    return max(0.0, (end_dt - start_dt).total_seconds())
+  return max(0.0, (end_dt - start_dt).total_seconds())
 
 
 def safe_stdev(values):
-    cleaned = [v for v in values if isinstance(v, (int, float))]
-    if len(cleaned) <= 1:
-        return 0.0
-    return statistics.pstdev(cleaned)
+  cleaned = [v for v in values if isinstance(v, (int, float))]
+  if len(cleaned) <= 1:
+    return 0.0
+  return statistics.pstdev(cleaned)
 
 
 def safe_mean(values):
-    cleaned = [v for v in values if isinstance(v, (int, float))]
-    if not cleaned:
-        return None
-    return sum(cleaned) / len(cleaned)
+  cleaned = [v for v in values if isinstance(v, (int, float))]
+  if not cleaned:
+    return None
+  return sum(cleaned) / len(cleaned)
+
+
+def safe_min(values):
+  cleaned = [v for v in values if isinstance(v, (int, float))]
+  if not cleaned:
+    return None
+  return min(cleaned)
+
+
+def safe_max(values):
+  cleaned = [v for v in values if isinstance(v, (int, float))]
+  if not cleaned:
+    return None
+  return max(cleaned)
+
+
+def safe_median(values):
+  cleaned = [v for v in values if isinstance(v, (int, float))]
+  if not cleaned:
+    return None
+  return statistics.median(cleaned)
+
+
+def safe_mad(values):
+  cleaned = [v for v in values if isinstance(v, (int, float))]
+  if not cleaned:
+    return None
+  median_value = statistics.median(cleaned)
+  deviations = [abs(v - median_value) for v in cleaned]
+  return statistics.median(deviations)
 
 
 def format_level_sort_key(level):
-    lowered = (level or "unknown").lower()
-    if lowered in DEFAULT_LEVEL_ORDER:
-        return (0, DEFAULT_LEVEL_ORDER.index(lowered), lowered)
-    return (1, 0, lowered)
+  lowered = (level or "unknown").lower()
+  if lowered in DEFAULT_LEVEL_ORDER:
+    return (0, DEFAULT_LEVEL_ORDER.index(lowered), lowered)
+  return (1, 0, lowered)
 
 
 def get_filtered_sut_energy_means(summary, sut_container=None, sut_containers=None):
-    """Extract SUT energy means, optionally filtering to a specific container.
+  """Extract SUT energy means, optionally filtering to a specific container.
 
-    `sut_containers` may be provided (list/set) to override the default `SUT_CONTAINERS` allowlist.
-    If the allowlist matches no containers, falls back to all non-excluded containers.
-    """
-    energy = summary.get("energy_by_container_name", {}) if isinstance(summary, dict) else {}
-    out = {}
-    allowed = set(sut_containers) if isinstance(sut_containers, (list, tuple, set)) else set(SUT_CONTAINERS)
-    
-    # If sut_containers was explicitly provided, use fallback strategy: try exact matches first, then all non-excluded
-    use_fallback = isinstance(sut_containers, (list, tuple, set))
-    
+  `sut_containers` may be provided (list/set) to override the default `SUT_CONTAINERS` allowlist.
+  If the allowlist matches no containers, falls back to all non-excluded containers.
+  """
+  energy = summary.get("energy_by_container_name", {}) if isinstance(summary, dict) else {}
+  out = {}
+  allowed = set(sut_containers) if isinstance(sut_containers, (list, tuple, set)) else set(SUT_CONTAINERS)
+
+  # If sut_containers was explicitly provided, use fallback strategy: try exact matches first, then all non-excluded.
+  use_fallback = isinstance(sut_containers, (list, tuple, set))
+
+  for container_name, stats in energy.items():
+    if container_name in EXCLUDED_CONTAINERS:
+      continue
+    # If a specific container is requested, prioritize that one (only when using default allowlist).
+    if sut_container and not use_fallback:
+      if container_name != sut_container:
+        continue
+    else:
+      if container_name not in allowed:
+        continue
+    if not isinstance(stats, dict):
+      continue
+    value = stats.get("mean")
+    if isinstance(value, (int, float)):
+      out[container_name] = value
+
+  # Fallback: if allowlist returned no matches and we were using an explicit allowlist, include all non-excluded.
+  if not out and use_fallback:
     for container_name, stats in energy.items():
-        if container_name in EXCLUDED_CONTAINERS:
-            continue
-        # If a specific container is requested, prioritize that one (only if using default allowlist)
-        if sut_container and not use_fallback:
-            if container_name != sut_container:
-                continue
-        else:
-            if container_name not in allowed:
-                continue
-        if not isinstance(stats, dict):
-            continue
-        value = stats.get("mean")
-        if isinstance(value, (int, float)):
-            out[container_name] = value
-    
-    # Fallback: if allowlist returned no matches and we were using an explicit allowlist, include all non-excluded
-    if not out and use_fallback:
-        for container_name, stats in energy.items():
-            if container_name in EXCLUDED_CONTAINERS:
-                continue
-            if not isinstance(stats, dict):
-                continue
-            value = stats.get("mean")
-            if isinstance(value, (int, float)):
-                out[container_name] = value
-    
-    return out
+      if container_name in EXCLUDED_CONTAINERS:
+        continue
+      if not isinstance(stats, dict):
+        continue
+      value = stats.get("mean")
+      if isinstance(value, (int, float)):
+        out[container_name] = value
+
+  return out
 
 
 def parse_locust_stats(run_dir):
-    stats_rows = load_csv_rows(Path(run_dir) / "locust_stats.csv")
-    if not stats_rows:
-        return {}
+  stats_rows = load_csv_rows(Path(run_dir) / "locust_stats.csv")
+  if not stats_rows:
+    return {}
 
-    aggregated = None
-    for row in stats_rows:
-        name = str(row.get("Name", "")).strip().lower()
-        row_type = str(row.get("Type", "")).strip().lower()
-        if name == "aggregated" or row_type == "aggregated":
-            aggregated = row
-            break
+  aggregated = None
+  for row in stats_rows:
+    name = str(row.get("Name", "")).strip().lower()
+    row_type = str(row.get("Type", "")).strip().lower()
+    if name == "aggregated" or row_type == "aggregated":
+      aggregated = row
+      break
 
-    if not aggregated:
-        return {}
+  if not aggregated:
+    return {}
 
-    total_requests = parse_float(aggregated.get("Request Count"))
-    total_failures = parse_float(aggregated.get("Failure Count"))
-    p95_latency = parse_float(aggregated.get("95%"))
-    throughput_rps = parse_float(aggregated.get("Requests/s"))
+  total_requests = parse_float(aggregated.get("Request Count"))
+  total_failures = parse_float(aggregated.get("Failure Count"))
+  p95_latency = parse_float(aggregated.get("95%"))
+  throughput_rps = parse_float(aggregated.get("Requests/s"))
 
-    error_rate = None
-    if isinstance(total_requests, (int, float)) and total_requests > 0 and isinstance(total_failures, (int, float)):
-        error_rate = max(0.0, min(1.0, total_failures / total_requests))
+  error_rate = None
+  if isinstance(total_requests, (int, float)) and total_requests > 0 and isinstance(total_failures, (int, float)):
+    error_rate = max(0.0, min(1.0, total_failures / total_requests))
 
-    return {
-        "total_requests": total_requests,
-        "total_failures": total_failures,
-        "p95_latency": p95_latency,
-        "throughput_mean_rps": throughput_rps,
-        "error_rate": error_rate,
-    }
+  return {
+    "total_requests": total_requests,
+    "total_failures": total_failures,
+    "p95_latency": p95_latency,
+    "throughput_mean_rps": throughput_rps,
+    "error_rate": error_rate,
+  }
 
 
 def infer_workload_level(run_name, metadata):
@@ -283,6 +316,331 @@ def collect_runs(runs_dir, specific_run=None):
         )
 
     return runs
+
+
+def load_attribution_artifacts(run_dir):
+    attribution_dir = Path(run_dir) / "attribution"
+    attribution_json_path = attribution_dir / "attribution.json"
+    service_csv_path = attribution_dir / "service_attribution.csv"
+
+    if not attribution_json_path.exists() or not service_csv_path.exists():
+      missing = []
+      if not attribution_json_path.exists():
+        missing.append("attribution.json")
+      if not service_csv_path.exists():
+        missing.append("service_attribution.csv")
+      return {
+        "present": False,
+        "error": None,
+        "missing": missing,
+        "attribution": None,
+        "service_rows": [],
+      }
+
+    try:
+      attribution_payload = load_json(attribution_json_path)
+      service_rows = load_csv_rows(service_csv_path)
+      return {
+        "present": True,
+        "error": None,
+        "missing": [],
+        "attribution": attribution_payload if isinstance(attribution_payload, dict) else None,
+        "service_rows": service_rows,
+      }
+    except (OSError, json.JSONDecodeError, csv.Error, ValueError) as exc:
+      return {
+        "present": False,
+        "error": str(exc),
+        "missing": [],
+        "attribution": None,
+        "service_rows": [],
+      }
+
+
+def normalize_service_row(row):
+    normalized = dict(row)
+    normalized["allocated_energy_joules"] = parse_float(row.get("allocated_energy_joules"))
+    normalized["container_count"] = parse_float(row.get("container_count"))
+    normalized["mapped_container_count"] = parse_float(row.get("mapped_container_count"))
+    normalized["mapped"] = str(row.get("mapped", "")).strip().lower() == "true"
+    return normalized
+
+
+def extract_service_name_candidate(row):
+  """Pick canonical-facing service identity from service attribution rows.
+
+  Preference order keeps Phase 1 anchored to emitted service-level artifacts:
+  service_name -> deployment_name -> service -> entity_name.
+  """
+  if not isinstance(row, dict):
+    return None, None
+
+  for source in ["service_name", "deployment_name", "service", "entity_name"]:
+    value = row.get(source)
+    if value is None:
+      continue
+    text = str(value).strip()
+    if text:
+      return text, source
+
+  return None, None
+
+
+def service_alias_key(name):
+  if name is None:
+    return None
+  text = str(name).strip().lower()
+  if not text:
+    return None
+  return "".join(ch for ch in text if ch.isalnum())
+
+
+def service_name_score(name, source):
+  source_priority = {
+    "service_name": 0,
+    "deployment_name": 1,
+    "service": 2,
+    "entity_name": 3,
+  }
+  raw = str(name or "")
+  lowered = raw.lower()
+  separator_penalty = sum(1 for ch in lowered if ch in " _./:")
+  dash_penalty = lowered.count("-")
+  return (
+    source_priority.get(source, 99),
+    separator_penalty + dash_penalty,
+    len(lowered),
+    lowered,
+  )
+
+
+def resolve_canonical_service_name(row, model_alias_registry):
+  candidate, source = extract_service_name_candidate(row)
+  alias = service_alias_key(candidate)
+  if alias is None:
+    return None
+
+  score = service_name_score(candidate, source)
+  existing = model_alias_registry.get(alias)
+  if existing is None or score < existing["score"]:
+    model_alias_registry[alias] = {"name": candidate, "score": score}
+
+  return model_alias_registry[alias]["name"]
+
+
+def compute_phase1_attribution_aggregates(run_items):
+    by_workload = {}
+    services_found_per_model = {"M1": set(), "M2": set()}
+    sum_consistency = {}
+    model_alias_registry = {"M1": {}, "M2": {}}
+
+    for item in run_items:
+      run_name = item.get("run_name")
+      metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+      workload = infer_workload_level(run_name, metadata)
+      workload_bucket = by_workload.setdefault(
+        workload,
+        {
+          "iterations_total": 0,
+          "attribution_present": 0,
+          "attribution_missing": 0,
+          "attribution_error": 0,
+          "models": {
+            "M1": {"valid_iterations": 0, "missing_or_failed_iterations": 0, "services": {}},
+            "M2": {"valid_iterations": 0, "missing_or_failed_iterations": 0, "services": {}},
+          },
+          "m2_primary_services": set(),
+        },
+      )
+      workload_bucket["iterations_total"] += 1
+
+      attr = item.get("attribution") if isinstance(item.get("attribution"), dict) else None
+      if not attr:
+        workload_bucket["attribution_missing"] += 1
+        for model in ["M1", "M2"]:
+          workload_bucket["models"][model]["missing_or_failed_iterations"] += 1
+        if item.get("attribution_error"):
+          workload_bucket["attribution_error"] += 1
+        continue
+
+      workload_bucket["attribution_present"] += 1
+      service_rows = [normalize_service_row(r) for r in attr.get("service_rows", [])]
+      if not service_rows:
+        service_rows = [normalize_service_row(r) for r in (attr.get("artifacts", {}).get("service_rows") or [])]
+      if not service_rows:
+        service_rows = [normalize_service_row(r) for r in item.get("attribution_service_rows", [])]
+
+      report = attr.get("attribution_report") if isinstance(attr.get("attribution_report"), dict) else None
+      model_coverage = {}
+      models = {}
+      if isinstance(report, dict) and isinstance(report.get("models"), dict):
+        models = report.get("models")
+      elif isinstance(attr.get("models"), dict):
+        models = attr.get("models")
+
+      for model in ["M1", "M2"]:
+        model_payload = models.get(model) if isinstance(models, dict) else None
+        coverage = model_payload.get("coverage") if isinstance(model_payload, dict) else None
+        model_coverage[model] = coverage if isinstance(coverage, dict) else {}
+
+      for model in ["M1", "M2"]:
+        rows_for_model = [r for r in service_rows if str(r.get("model_variant")) == model]
+        if not rows_for_model:
+          workload_bucket["models"][model]["missing_or_failed_iterations"] += 1
+          continue
+
+        workload_bucket["models"][model]["valid_iterations"] += 1
+        services_for_model = workload_bucket["models"][model]["services"]
+        for row in rows_for_model:
+          service_name = resolve_canonical_service_name(row, model_alias_registry[model])
+          if not service_name:
+            continue
+          services_found_per_model[model].add(service_name)
+          value = row.get("allocated_energy_joules")
+          if not isinstance(value, (int, float)):
+            continue
+          services_for_model.setdefault(service_name, []).append(value)
+          if model == "M2" and row.get("service_group") == "primary_application":
+            workload_bucket["m2_primary_services"].add(service_name)
+
+        service_sum = sum(
+          value
+          for value in [r.get("allocated_energy_joules") for r in rows_for_model]
+          if isinstance(value, (int, float))
+        )
+        reference_sum = model_coverage.get(model, {}).get("total_attributed_energy_joules")
+        delta = None
+        consistent = None
+        if isinstance(reference_sum, (int, float)):
+          delta = service_sum - reference_sum
+          consistent = math.isclose(service_sum, reference_sum, rel_tol=1e-9, abs_tol=1e-9)
+
+        sum_consistency.setdefault(workload, {}).setdefault(model, []).append(
+          {
+            "run_name": run_name,
+            "service_sum": service_sum,
+            "reference_sum": reference_sum,
+            "delta": delta,
+            "consistent": consistent,
+          }
+        )
+
+    # Build compact aggregate stats per workload/model/service
+    aggregate = {
+      "model_labels": {
+        "M2": "primary_valid_service_attribution",
+        "M1": "identity_limited_direct_kepler_diagnostic",
+      },
+      "workloads": {},
+      "services_found_per_model": {
+        "M1": sorted(services_found_per_model["M1"]),
+        "M2": sorted(services_found_per_model["M2"]),
+      },
+    }
+
+    for workload, payload in sorted(by_workload.items(), key=lambda item: format_level_sort_key(item[0])):
+      aggregate_workload = {
+        "iterations_total": payload["iterations_total"],
+        "attribution_present": payload["attribution_present"],
+        "attribution_missing": payload["attribution_missing"],
+        "attribution_error": payload["attribution_error"],
+        "m2_primary_application_services": sorted(payload["m2_primary_services"]),
+        "models": {},
+        "sum_consistency": {},
+      }
+
+      for model in ["M1", "M2"]:
+        model_payload = payload["models"][model]
+        model_services = {}
+        for service_name, values in sorted(model_payload["services"].items()):
+          mean_value = safe_mean(values)
+          median_value = safe_median(values)
+          stdev_value = safe_stdev(values)
+          mad_value = safe_mad(values)
+          cv_value = None
+          robust_cv_value = None
+          if isinstance(mean_value, (int, float)) and mean_value != 0:
+            cv_value = stdev_value / mean_value
+          if isinstance(median_value, (int, float)) and median_value != 0 and isinstance(mad_value, (int, float)):
+            robust_cv_value = mad_value / median_value
+
+          model_services[service_name] = {
+            "count": len(values),
+            "mean": mean_value,
+            "median": median_value,
+            "std": stdev_value,
+            "min": safe_min(values),
+            "max": safe_max(values),
+            "cv": cv_value,
+            "mad": mad_value,
+            "robust_cv": robust_cv_value,
+          }
+
+        aggregate_workload["models"][model] = {
+          "valid_iterations": model_payload["valid_iterations"],
+          "missing_or_failed_iterations": model_payload["missing_or_failed_iterations"],
+          "services": model_services,
+        }
+
+        checks = sum_consistency.get(workload, {}).get(model, [])
+        aggregate_workload["sum_consistency"][model] = {
+          "runs_checked": len(checks),
+          "runs_with_reference": sum(1 for c in checks if isinstance(c.get("reference_sum"), (int, float))),
+          "all_consistent": all(c.get("consistent") is True for c in checks if c.get("consistent") is not None),
+          "max_abs_delta": safe_max([abs(c["delta"]) for c in checks if isinstance(c.get("delta"), (int, float))]),
+          "checks": checks,
+        }
+
+      aggregate["workloads"][workload] = aggregate_workload
+
+    return aggregate
+
+
+def format_phase1_validation_summary(attribution_aggregate):
+    lines = []
+    lines.append("=== ATTRIBUTION PHASE1 VALIDATION SUMMARY ===")
+    workloads = sorted(attribution_aggregate.get("workloads", {}).keys(), key=format_level_sort_key)
+    lines.append(f"workloads_found: {', '.join(workloads) if workloads else '<none>'}")
+
+    for workload in workloads:
+      payload = attribution_aggregate["workloads"][workload]
+      lines.append(f"- workload={workload}")
+      lines.append(
+        "  iterations="
+        f"total:{payload.get('iterations_total', 0)} "
+        f"attr_present:{payload.get('attribution_present', 0)} "
+        f"attr_missing:{payload.get('attribution_missing', 0)} "
+        f"attr_error:{payload.get('attribution_error', 0)}"
+      )
+      lines.append(
+        "  m2_primary_application_services: "
+        + (", ".join(payload.get("m2_primary_application_services", [])) or "<none>")
+      )
+
+      for model in ["M1", "M2"]:
+        model_data = payload.get("models", {}).get(model, {})
+        services = sorted((model_data.get("services") or {}).keys())
+        lines.append(
+          f"  {model}: valid_iterations={model_data.get('valid_iterations', 0)} "
+          f"missing_or_failed={model_data.get('missing_or_failed_iterations', 0)} "
+          f"services={len(services)}"
+        )
+        lines.append("    services_list: " + (", ".join(services) if services else "<none>"))
+
+        consistency = payload.get("sum_consistency", {}).get(model, {})
+        lines.append(
+          "    sum_consistency: "
+          f"runs_checked={consistency.get('runs_checked', 0)} "
+          f"runs_with_reference={consistency.get('runs_with_reference', 0)} "
+          f"all_consistent={consistency.get('all_consistent')} "
+          f"max_abs_delta={consistency.get('max_abs_delta')}"
+        )
+
+    global_services = attribution_aggregate.get("services_found_per_model", {})
+    lines.append("services_found_per_model:")
+    lines.append("  M1: " + (", ".join(global_services.get("M1", [])) or "<none>"))
+    lines.append("  M2: " + (", ".join(global_services.get("M2", [])) or "<none>"))
+    return "\n".join(lines)
 
 
 def mask_prom_url(prom_url):
@@ -674,6 +1032,22 @@ def make_dashboard_data(runs_dir, runs, sut_container):
         "latency_outlier_runs": sum(1 for row in run_rows if "unusually_high_latency" in row.get("flags", [])),
     }
 
+    run_items_with_attr = []
+    for item in runs:
+        attr_payload = load_attribution_artifacts(item.get("run_dir"))
+        run_items_with_attr.append(
+            {
+                **item,
+                "attribution": attr_payload.get("attribution"),
+                "attribution_service_rows": attr_payload.get("service_rows") or [],
+                "attribution_present": bool(attr_payload.get("present")),
+                "attribution_missing": attr_payload.get("missing") or [],
+                "attribution_error": attr_payload.get("error"),
+            }
+        )
+
+    attribution_phase1 = compute_phase1_attribution_aggregates(run_items_with_attr)
+
     return {
         "sut_container": sut_container,
         "sut_containers": sut_containers_list,
@@ -687,6 +1061,7 @@ def make_dashboard_data(runs_dir, runs, sut_container):
             "energy_per_request_stdev": safe_stdev(energy_per_req_values),
             "throughput_stdev": safe_stdev(throughput_values),
         },
+        "attribution_phase1": attribution_phase1,
     }
 
 
@@ -882,9 +1257,10 @@ def build_html(data):
       <div class=\"small\">Switch the latency and energy trend charts between iteration order and workload-level labels.</div>
     </section>
 
-    <section class=\"card\" style=\"margin-bottom:14px;\">
+
+    <section class="card" style="margin-bottom:14px;">
       <h2>Per-Level Aggregate Summary (Mean ± Std Dev)</h2>
-      <div class=\"table-wrap\">
+      <div class="table-wrap">
         <table>
           <thead>
             <tr>
@@ -896,7 +1272,54 @@ def build_html(data):
               <th>CPU Mean</th>
             </tr>
           </thead>
-          <tbody id=\"levelTableBody\"></tbody>
+          <tbody id="levelTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Phase 2 Attribution Panels -->
+    <section class="card" style="margin-bottom:14px;">
+      <h2>Attribution Quality Summary by Workload</h2>
+      <div id="attrQualitySummary"></div>
+    </section>
+
+    <section class="card" style="margin-bottom:14px;">
+      <h2>Total Service Contribution by Workload</h2>
+      <canvas id="m2PrimaryEnergyBar"></canvas>
+      <div class="small" id="m2PrimaryEnergyWarn"></div>
+    </section>
+
+    <section class="card" style="margin-bottom:14px;">
+      <h2>Top Service Energy Trends</h2>
+      <canvas id="topServiceTrends"></canvas>
+      <div class="small" id="topServiceTrendsWarn"></div>
+    </section>
+
+    <section class="card" style="margin-bottom:14px;">
+      <h2>M1 vs M2 Diagnostic Comparison</h2>
+      <canvas id="m1m2Compare"></canvas>
+      <div class="small">M1 is identity-limited and not valid for service-level attribution. M2 is the valid SUT model.</div>
+    </section>
+
+    <section class="card" style="margin-bottom:14px;">
+      <h2>Attribution Aggregate Table</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Workload</th>
+              <th>Model</th>
+              <th>Service</th>
+              <th>Mean (J)</th>
+              <th>Median (J)</th>
+              <th>Std</th>
+              <th>CV</th>
+              <th>Robust CV</th>
+              <th>Iterations</th>
+              <th>Missing/Failed</th>
+            </tr>
+          </thead>
+          <tbody id="attrAggTableBody"></tbody>
         </table>
       </div>
     </section>
@@ -1544,6 +1967,52 @@ def build_html(data):
       options: commonOptions,
     }});
 
+    const m2PrimaryEnergyBar = new Chart(document.getElementById('m2PrimaryEnergyBar'), {{
+      type: 'bar',
+      data: {{ labels: [], datasets: [] }},
+      options: {{
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {{ mode: 'index', intersect: false }},
+        plugins: {{
+          legend: {{
+            position: 'right',
+            labels: {{ boxWidth: 10, boxHeight: 10 }}
+          }}
+        }},
+        scales: {{
+          x: {{ stacked: true }},
+          y: {{ beginAtZero: true, stacked: true, title: {{ display: true, text: 'Allocated energy (J)' }} }},
+        }},
+      }},
+    }});
+
+    const topServiceTrends = new Chart(document.getElementById('topServiceTrends'), {{
+      type: 'bar',
+      data: {{ labels: [], datasets: [] }},
+      options: {{
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {{ mode: 'index', intersect: false }},
+        plugins: {{
+          legend: {{
+            position: 'bottom',
+            labels: {{ boxWidth: 10, boxHeight: 10, usePointStyle: true }}
+          }}
+        }},
+        scales: {{
+          x: {{ stacked: false }},
+          y: {{ beginAtZero: true, title: {{ display: true, text: 'Mean allocated energy (J)' }} }},
+        }},
+      }},
+    }});
+
+    const m1m2Compare = new Chart(document.getElementById('m1m2Compare'), {{
+      type: 'bar',
+      data: {{ labels: [], datasets: [] }},
+      options: commonOptions,
+    }});
+
     function updateLevelCharts(levelRows) {{
       const labels = levelRows.map((r) => r.workload_level);
 
@@ -1663,6 +2132,284 @@ def build_html(data):
         `SUT containers: ${{(data.sut_containers || []).join(', ')}} | Excluded infra: ${{(data.excluded_containers || []).join(', ')}}`;
     }}
 
+    function getAttributionWorkloadsSorted() {{
+      const workloads = (data.attribution_phase1 && data.attribution_phase1.workloads) || {{}};
+      return sortLevels(Object.keys(workloads));
+    }}
+
+    function renderAttrQualitySummary() {{
+      const host = document.getElementById('attrQualitySummary');
+      const workloads = (data.attribution_phase1 && data.attribution_phase1.workloads) || {{}};
+      const labels = getAttributionWorkloadsSorted();
+
+      if (!labels.length) {{
+        host.textContent = 'No attribution workload aggregates found.';
+        return;
+      }}
+
+      const rows = labels.map((level) => {{
+        const w = workloads[level] || {{}};
+        const m2 = ((w.models || {{}}).M2) || {{}};
+        const services = Object.keys(m2.services || {{}}).length;
+        return `${{level}}: iters=${{w.iterations_total || 0}}, attr_present=${{w.attribution_present || 0}}, M2_valid=${{m2.valid_iterations || 0}}, M2_services=${{services}}`;
+      }});
+      host.textContent = rows.join(' | ');
+    }}
+
+    function serviceColorMap(serviceNames) {{
+      const palette = ['#116466', '#b85c38', '#2f3e46', '#8a2d3b', '#556b2f', '#5a4e7a', '#e07a5f', '#3d405b', '#6b705c', '#bc6c25', '#7f5539', '#3a86ff'];
+      const map = new Map();
+      [...serviceNames].sort().forEach((service, idx) => {{
+        map.set(service, palette[idx % palette.length]);
+      }});
+      map.set('Other', '#7c7c7c');
+      return map;
+    }}
+
+    function shortServiceLabel(name) {{
+      const text = String(name || '');
+      if (text === 'recommendationservice') return 'recommendation';
+      if (text === 'productcatalogservice') return 'productcatalog';
+      if (text.endsWith('service')) return text.replace(/service$/i, '');
+      return text;
+    }}
+
+    function collectM2ServiceSeries(labels) {{
+      const workloads = (data.attribution_phase1 && data.attribution_phase1.workloads) || {{}};
+      const seriesByService = new Map();
+
+      labels.forEach((level) => {{
+        const m2Services = ((((workloads[level] || {{}}).models || {{}}).M2 || {{}}).services) || {{}};
+        Object.entries(m2Services).forEach(([service, stats]) => {{
+          if (!seriesByService.has(service)) seriesByService.set(service, Array(labels.length).fill(null));
+          const mean = stats && typeof stats.mean === 'number' ? stats.mean : null;
+          seriesByService.get(service)[labels.indexOf(level)] = mean;
+        }});
+      }});
+
+      return seriesByService;
+    }}
+
+    function hasValidM2Data(seriesByService) {{
+      return Array.from(seriesByService.values()).some((values) => values.some((v) => typeof v === 'number' && !Number.isNaN(v)));
+    }}
+
+    function rankServicesByMean(seriesByService) {{
+      return Array.from(seriesByService.entries()).map(([service, values]) => {{
+        const nums = values.filter((v) => typeof v === 'number' && !Number.isNaN(v));
+        const mean = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+        return {{ service, values, mean }};
+      }}).sort((a, b) => b.mean - a.mean);
+    }}
+
+    function collapseTinyServices(seriesByService) {{
+      const ranked = rankServicesByMean(seriesByService);
+      const totalMean = ranked.reduce((acc, row) => acc + (row.mean > 0 ? row.mean : 0), 0);
+      const maxVisibleServices = 8;
+      const minShareForStandalone = 0.03;
+
+      const keep = new Set();
+      ranked.forEach((row, idx) => {{
+        const share = totalMean > 0 ? row.mean / totalMean : 0;
+        if (idx < maxVisibleServices && (share >= minShareForStandalone || idx < 5)) keep.add(row.service);
+      }});
+
+      if (ranked.length <= keep.size) return {{ collapsed: seriesByService, collapsedCount: 0 }};
+
+      const collapsed = new Map();
+      let labelsLength = 0;
+      ranked.forEach((row) => {{
+        labelsLength = Math.max(labelsLength, row.values.length);
+        if (keep.has(row.service)) collapsed.set(row.service, row.values);
+      }});
+
+      const otherValues = Array(labelsLength).fill(0);
+      let collapsedCount = 0;
+      ranked.forEach((row) => {{
+        if (keep.has(row.service)) return;
+        collapsedCount += 1;
+        row.values.forEach((value, idx) => {{
+          if (typeof value === 'number' && !Number.isNaN(value)) otherValues[idx] += value;
+        }});
+      }});
+
+      if (otherValues.some((v) => Math.abs(v) > 1e-9)) collapsed.set('Other', otherValues);
+      return {{ collapsed, collapsedCount }};
+    }}
+
+    function renderM2PrimaryEnergyBar() {{
+      const labels = getAttributionWorkloadsSorted();
+      const warnHost = document.getElementById('m2PrimaryEnergyWarn');
+      const seriesByService = collectM2ServiceSeries(labels);
+
+      if (!labels.length || !hasValidM2Data(seriesByService)) {{
+        m2PrimaryEnergyBar.data.labels = labels;
+        m2PrimaryEnergyBar.data.datasets = [];
+        m2PrimaryEnergyBar.update();
+        warnHost.textContent = 'No valid M2 attribution data available.';
+        return;
+      }}
+
+      const {{ collapsed, collapsedCount }} = collapseTinyServices(seriesByService);
+      const colorByService = serviceColorMap(collapsed.keys());
+      const datasets = [];
+
+      Array.from(collapsed.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([service, values], idx) => {{
+        const hasNonZero = values.some((v) => typeof v === 'number' && Math.abs(v) > 1e-9);
+        if (!hasNonZero) return;
+        const color = colorByService.get(service);
+        datasets.push({{
+          label: shortServiceLabel(service),
+          data: values,
+          borderColor: color,
+          backgroundColor: color + 'bb',
+          borderWidth: 1,
+          stack: 'm2-energy',
+        }});
+      }});
+
+      m2PrimaryEnergyBar.data.labels = labels;
+      m2PrimaryEnergyBar.data.datasets = datasets;
+      m2PrimaryEnergyBar.update();
+
+      if (!datasets.length) {{
+        warnHost.textContent = 'No valid M2 attribution data available.';
+      }} else if (collapsedCount > 0) {{
+        warnHost.textContent = `Collapsed ${'{'}collapsedCount{'}'} low-contribution services into Other.`;
+      }} else {{
+        warnHost.textContent = '';
+      }}
+    }}
+
+    function renderTopServiceTrends() {{
+      const labels = getAttributionWorkloadsSorted();
+      const warnHost = document.getElementById('topServiceTrendsWarn');
+      const seriesByService = collectM2ServiceSeries(labels);
+
+      if (!labels.length || !hasValidM2Data(seriesByService)) {{
+        topServiceTrends.data.labels = labels;
+        topServiceTrends.data.datasets = [];
+        topServiceTrends.update();
+        warnHost.textContent = 'No valid M2 attribution data available.';
+        return;
+      }}
+
+      const ranked = rankServicesByMean(seriesByService).filter((row) => row.mean >= 0);
+
+      const top = ranked.slice(0, 5);
+      const colorByService = serviceColorMap(seriesByService.keys());
+      const datasets = top.map((entry) => {{
+        const color = colorByService.get(entry.service);
+        return {{
+          label: shortServiceLabel(entry.service),
+          data: entry.values,
+          borderColor: color,
+          backgroundColor: color + '99',
+          borderWidth: 1,
+        }};
+      }});
+
+      topServiceTrends.data.labels = labels;
+      topServiceTrends.data.datasets = datasets;
+      topServiceTrends.update();
+
+      warnHost.textContent = datasets.length ? '' : 'No valid M2 attribution data available.';
+    }}
+
+    function renderM1M2DiagnosticComparison() {{
+      const workloads = (data.attribution_phase1 && data.attribution_phase1.workloads) || {{}};
+      const labels = getAttributionWorkloadsSorted();
+
+      const m1Counts = labels.map((level) => Object.keys((((((workloads[level] || {{}}).models || {{}}).M1 || {{}}).services) || {{}})).length);
+      const m2Counts = labels.map((level) => Object.keys((((((workloads[level] || {{}}).models || {{}}).M2 || {{}}).services) || {{}})).length);
+
+      m1m2Compare.data.labels = labels;
+      m1m2Compare.data.datasets = [
+        {{
+          label: 'M1 service count',
+          data: m1Counts,
+          borderColor: '#8a2d3b',
+          backgroundColor: '#8a2d3b99',
+          borderWidth: 1,
+        }},
+        {{
+          label: 'M2 service count',
+          data: m2Counts,
+          borderColor: '#116466',
+          backgroundColor: '#11646699',
+          borderWidth: 1,
+        }},
+      ];
+      m1m2Compare.update();
+    }}
+
+    function renderAttributionAggregateTable() {{
+      const body = document.getElementById('attrAggTableBody');
+      const workloads = (data.attribution_phase1 && data.attribution_phase1.workloads) || {{}};
+      body.innerHTML = '';
+
+      getAttributionWorkloadsSorted().forEach((workload) => {{
+        const payload = workloads[workload] || {{}};
+        ['M1', 'M2'].forEach((model) => {{
+          const modelPayload = ((payload.models || {{}})[model]) || {{}};
+          const services = modelPayload.services || {{}};
+          const serviceNames = Object.keys(services).sort();
+
+          if (!serviceNames.length) {{
+            const tr = document.createElement('tr');
+            [
+              workload,
+              model,
+              '-',
+              '-',
+              '-',
+              '-',
+              '-',
+              '-',
+              String(modelPayload.valid_iterations ?? 0),
+              String(modelPayload.missing_or_failed_iterations ?? 0),
+            ].forEach((value) => {{
+              const td = document.createElement('td');
+              td.textContent = value;
+              tr.appendChild(td);
+            }});
+            body.appendChild(tr);
+            return;
+          }}
+
+          serviceNames.forEach((service) => {{
+            const stats = services[service] || {{}};
+            const tr = document.createElement('tr');
+            [
+              workload,
+              model,
+              service,
+              formatMaybeNumber(stats.mean, 6),
+              formatMaybeNumber(stats.median, 6),
+              formatMaybeNumber(stats.std, 6),
+              formatMaybeNumber(stats.cv, 6),
+              formatMaybeNumber(stats.robust_cv, 6),
+              String(modelPayload.valid_iterations ?? 0),
+              String(modelPayload.missing_or_failed_iterations ?? 0),
+            ].forEach((value) => {{
+              const td = document.createElement('td');
+              td.textContent = value;
+              tr.appendChild(td);
+            }});
+            body.appendChild(tr);
+          }});
+        }});
+      }});
+    }}
+
+    function renderPhase2AttributionPanels() {{
+      renderAttrQualitySummary();
+      renderM2PrimaryEnergyBar();
+      renderTopServiceTrends();
+      renderM1M2DiagnosticComparison();
+      renderAttributionAggregateTable();
+    }}
+
     function renderAll() {{
       const rows = selectedRuns();
       const levelRows = computeLevelAggregates(rows);
@@ -1672,6 +2419,7 @@ def build_html(data):
       updateLevelCharts(levelRows);
       updatePerRunCharts(rows);
       renderMeta(rows);
+      renderPhase2AttributionPanels();
     }}
 
     document.getElementById('selectAllBtn').addEventListener('click', () => {{
@@ -1702,7 +2450,10 @@ def build_html(data):
     renderRunSelector();
     updateAxisModeButtons();
     renderAll();
+
+
   </script>
+
 </body>
 </html>
 """
@@ -1729,6 +2480,11 @@ def main():
         default="nginx",
         help="Container name to highlight as application SUT (default: nginx)",
     )
+    parser.add_argument(
+      "--validate-attribution-contract",
+      action="store_true",
+      help="Print compact Phase 1 attribution aggregate validation summary",
+    )
     args = parser.parse_args()
 
     runs = collect_runs(args.runs_dir, args.run_dir)
@@ -1736,10 +2492,27 @@ def main():
         raise SystemExit("No summary/metadata files found in the selected run directories")
 
     data = make_dashboard_data(args.runs_dir, runs, args.sut_container)
+
+    # Temporary forensic debug output to verify dashboard payload integrity.
+    print("=== DASHBOARD PAYLOAD DEBUG ===")
+    print(f"runs_count: {len(data.get('runs', []))}")
+    print(f"dashboard_top_level_keys: {sorted(data.keys())}")
+    workload_counts = {
+      str(level): int((payload or {}).get("iterations_total", 0))
+      for level, payload in (data.get("attribution_phase1", {}).get("workloads", {}) or {}).items()
+    }
+    print(f"per_workload_counts: {workload_counts}")
+    attr_keys = sorted((data.get("attribution_phase1", {}) or {}).keys())
+    print(f"attribution_aggregate_keys: {attr_keys}")
+
     html = build_html(data)
 
     output_path = Path(args.output)
     output_path.write_text(html, encoding="utf-8")
+
+    if args.validate_attribution_contract:
+      print(format_phase1_validation_summary(data.get("attribution_phase1", {})))
+
     print(f"Dashboard written to {output_path}")
     print(f"Runs included: {', '.join(row['name'] for row in data['runs'])}")
 
