@@ -180,3 +180,17 @@ python scripts/manage_sut.py down \
 
 `up` applies filtered manifests and waits for deployment readiness.
 `down` deletes the same filtered manifests, waits for matching pod termination, then optionally sleeps.
+
+## Submodule management
+
+The pipeline expects an application to be it's own full git repository. If you want to add a new application you can run the following command:
+
+```
+git submodule add git@github.com:open-telemetry/opentelemetry-demo.git apps/oteldemo
+```
+
+If you need to fetch existing submodules after cloning the repository, you can run:
+
+```git submodule update --init --recursive
+
+```
