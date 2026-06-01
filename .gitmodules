@@ -10,3 +10,9 @@
 [submodule "apps/deathstarbench"]
 	path = apps/deathstarbench
 	url = git@github.com:delimitrou/DeathStarBench.git
+[submodule "apps/oteldemo-2.0.0"]
+	path = apps/oteldemo-2.0.0
+	url = git@github.com:open-telemetry/opentelemetry-demo.git
+[submodule "apps/oteldemo-1.12.0"]
+	path = apps/oteldemo-1.12.0
+	url = git@github.com:open-telemetry/opentelemetry-demo.git
