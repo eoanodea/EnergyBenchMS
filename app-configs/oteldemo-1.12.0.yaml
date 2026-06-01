@@ -1,0 +1,20 @@
+manifest_path: otel-demo.yaml
+namespace: otel-demo
+
+resource_overrides:
+  - kind: Service
+    name: frontend-proxy
+    namespace: otel-demo
+    patch:
+      spec:
+        type: NodePort
+        ports:
+          - port: 8080
+            targetPort: 8080
+            nodePort: 30450
+
+exclude_resource_patterns:
+  - "(^|/)loadgenerator($|[-/])"
+  - "(^|/)grafana($|[-/])"
+  - "(^|/)jaeger($|[-/])"
+  - "(^|/)prometheus($|[-/])"
