@@ -1,4 +1,4 @@
-manifest_path: ../social-network.yaml
+manifest_path: social-network.yaml
 namespace: default
 
 resource_overrides:
