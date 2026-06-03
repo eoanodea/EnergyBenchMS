@@ -16,5 +16,4 @@ resource_overrides:
 exclude_resource_patterns:
   - "(^|/)loadgenerator($|[-/])"
   - "(^|/)grafana($|[-/])"
-  - "(^|/)jaeger($|[-/])"
   - "(^|/)prometheus($|[-/])"
