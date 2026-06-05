@@ -194,3 +194,24 @@ If you need to fetch existing submodules after cloning the repository, you can r
 ```git submodule update --init --recursive
 
 ```
+
+Adding a new submodule (using otel demo 2.0.0 as an example):
+
+1. Create the submodule in the desired location (e.g. `apps/oteldemo-2.0.0`):
+
+```
+git submodule add --name apps/oteldemo-2.0.0 git@github.com:open-telemetry/opentelemetry-demo.git apps/oteldemo-2.0.0
+```
+
+2. Check out the desired version in the submodule:
+
+```
+git -C apps/oteldemo-2.0.0 fetch --tags
+git -C apps/oteldemo-2.0.0 checkout 2.0.0
+```
+
+3. If you need to sync on another machine, run
+
+```
+git submodule update --init --recursive
+```

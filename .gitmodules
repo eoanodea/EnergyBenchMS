@@ -16,3 +16,6 @@
 [submodule "apps/oteldemo-1.12.0"]
 	path = apps/oteldemo-1.12.0
 	url = git@github.com:open-telemetry/opentelemetry-demo.git
+[submodule "socialnetwork-0.1.0"]
+	path = apps/socialnetwork-0.1.0
+	url = git@github.com:delimitrou/DeathStarBench.git
