@@ -22,3 +22,12 @@
 [submodule "socialnetwork-0.2.0"]
 	path = apps/socialnetwork-0.2.0
 	url = git@github.com:delimitrou/DeathStarBench.git
+[submodule "apps/onlineboutique-0.10.0"]
+	path = apps/onlineboutique-0.10.0
+	url = git@github.com:GoogleCloudPlatform/microservices-demo.git
+[submodule "apps/onlineboutique-0.9.0"]
+	path = apps/onlineboutique-0.9.0
+	url = git@github.com:GoogleCloudPlatform/microservices-demo.git
+[submodule "apps/onlineboutique-0.4.2"]
+	path = apps/onlineboutique-0.4.2
+	url = git@github.com:GoogleCloudPlatform/microservices-demo.git
