@@ -1,10 +1,10 @@
 manifest_path: social-network.yaml
-namespace: default
+namespace: socialnetwork
 
 resource_overrides:
   - kind: Service
     name: nginx-thrift
-    namespace: default
+    namespace: socialnetwork
     patch:
       spec:
         type: NodePort
