@@ -31,3 +31,6 @@
 [submodule "apps/onlineboutique-0.4.2"]
 	path = apps/onlineboutique-0.4.2
 	url = git@github.com:GoogleCloudPlatform/microservices-demo.git
+[submodule "apps/train-ticket"]
+	path = apps/train-ticket
+	url = git@github.com:FudanSELab/train-ticket.git
