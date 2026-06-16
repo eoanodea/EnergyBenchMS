@@ -1,0 +1,19 @@
+manifest_path: deployment/kubetnetes-manifests/k8s-with-jaeger
+namespace: default
+
+resource_overrides:
+  - kind: Service
+    name: ts-gateway-service
+    patch:
+      spec:
+        type: NodePort
+        ports:
+          - port: 18888
+            targetPort: 18888
+            nodePort: 32677
+
+exclude_resource_patterns:
+  - "(^|/)jaeger($|[-/])"
+  - "(^|/)zipkin($|[-/])"
+  - "(^|/)skywalking($|[-/])"
+  - "(^|/)elasticsearch($|[-/])"
