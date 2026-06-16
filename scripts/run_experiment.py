@@ -158,6 +158,8 @@ def manage_sut_up(app, args):
         "up",
         "--app",
         app,
+        "--timeout-seconds",
+        str(args.sut_ready_timeout_seconds),
     ]
     append_deployment_overrides(deploy_cmd, args)
     run_command(deploy_cmd)
@@ -544,6 +546,15 @@ def main():
         ),
     )
     parser.add_argument(
+        "--sut-ready-timeout-seconds",
+        type=int,
+        default=300,
+        help=(
+            "How long to wait for SUT deployments to become ready before failing "
+            "(default: 300)."
+        ),
+    )
+    parser.add_argument(
         "--prom-url",
         help="Optional Prometheus URL used as authoritative time source",
     )
@@ -596,6 +607,8 @@ def main():
             args.ramp_exclusion_seconds,
             workload,
         )
+        if args.sut_ready_timeout_seconds < 0:
+            raise ValueError("sut ready timeout seconds must be at least 0")
 
         # Resolve locust file path from CLI input.
         resolved_locustfile = resolve_locustfile(args.locustfile, args.app)
