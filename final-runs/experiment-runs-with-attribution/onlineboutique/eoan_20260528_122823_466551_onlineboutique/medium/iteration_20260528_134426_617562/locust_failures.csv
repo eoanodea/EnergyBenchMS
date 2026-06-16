@@ -1,0 +1,14 @@
+Method,Name,Error,Occurrences
+GET,/product/2ZYFJ3GM2N,"ConnectionRefusedError(111, 'Connection refused')",86
+GET,/product/0PUK6V6EV0,"ConnectionRefusedError(111, 'Connection refused')",93
+POST,/cart,CatchResponseError('Cart failed: 0'),596
+GET,/product/1YMWWN1N4O,"ConnectionRefusedError(111, 'Connection refused')",75
+GET,/product/OLJCESPC7Z,"ConnectionRefusedError(111, 'Connection refused')",87
+GET,/,"ConnectionRefusedError(111, 'Connection refused')",3925
+GET,/product/66VCHSJNUP,"ConnectionRefusedError(111, 'Connection refused')",66
+GET,/,CatchResponseError('Homepage failed: 0'),750
+GET,/product/9SIQT8TOJO,"ConnectionRefusedError(111, 'Connection refused')",76
+POST,/cart/checkout,CatchResponseError('Checkout failed: 0'),236
+GET,/product/6E92ZMYYFZ,"ConnectionRefusedError(111, 'Connection refused')",87
+GET,/product/L9ECAV7KIM,"ConnectionRefusedError(111, 'Connection refused')",88
+GET,/product/LS4PSXUNUM,"ConnectionRefusedError(111, 'Connection refused')",92

@@ -1,0 +1,131 @@
+{
+  "app_path": "/home/ubuntu/EnergyBenchMS/apps/onlineboutique",
+  "workload_path": "/home/ubuntu/EnergyBenchMS/workloads/onlineboutique.yaml",
+  "workload_parameters": {
+    "target": "http://54.171.175.240:30427",
+    "users": 500,
+    "workload_levels": [
+      {
+        "low": 40
+      },
+      {
+        "medium": 80
+      },
+      {
+        "high": 150
+      }
+    ],
+    "spawn_rate": 5.0,
+    "duration": 120,
+    "port": 30427,
+    "saturation": {
+      "levels": [
+        20,
+        40,
+        60,
+        80,
+        100,
+        150,
+        200,
+        300,
+        500
+      ],
+      "dwell_seconds": 120,
+      "spawn_rate": 5,
+      "ramp_exclusion_seconds": 20,
+      "reset_between_levels": true,
+      "cooldown_seconds": 120
+    }
+  },
+  "workload_label": null,
+  "experiment_status": "success",
+  "locust_exit_code": null,
+  "locust_error": null,
+  "ramp_exclusion_seconds": 20,
+  "baseline_seconds": 20,
+  "locust_artifacts": {
+    "stats_csv": "runs/20260506_123400_259976_onlineboutique/level_500_iteration_20260506_132100_267359/locust_stats.csv",
+    "stats_history_csv": "runs/20260506_123400_259976_onlineboutique/level_500_iteration_20260506_132100_267359/locust_stats_history.csv",
+    "failures_csv": "runs/20260506_123400_259976_onlineboutique/level_500_iteration_20260506_132100_267359/locust_failures.csv",
+    "exceptions_csv": "runs/20260506_123400_259976_onlineboutique/level_500_iteration_20260506_132100_267359/locust_exceptions.csv"
+  },
+  "timestamps": {
+    "experiment_start": "2026-05-06T13:21:00.330920",
+    "workload_start": "2026-05-06T13:21:55.978509",
+    "workload_effective_start": "2026-05-06T13:22:15.978509",
+    "workload_end": "2026-05-06T13:23:56.375315"
+  },
+  "sut_containers": [
+    "currencyservice",
+    "productcatalogservice",
+    "checkoutservice",
+    "shippingservice",
+    "cartservice",
+    "redis-cart",
+    "emailservice",
+    "paymentservice",
+    "frontend",
+    "recommendationservice",
+    "adservice"
+  ],
+  "sut_container_source": "deployment_targets",
+  "deployment": {
+    "manifest_source": "/home/ubuntu/EnergyBenchMS/apps/onlineboutique/release/kubernetes-manifests.yaml",
+    "namespace_override": "onlineboutique",
+    "excluded_kinds": [],
+    "excluded_resource_patterns": [
+      "(^|/)loadgenerator($|[-/])",
+      "(^|/)prometheus($|[-/])",
+      "(^|/)grafana($|[-/])",
+      "(^|/)jaeger($|[-/])",
+      "(^|/)zipkin($|[-/])"
+    ],
+    "sut_name": "currencyservice",
+    "deployments": [
+      {
+        "name": "currencyservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "productcatalogservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "checkoutservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "shippingservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "cartservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "redis-cart",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "emailservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "paymentservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "frontend",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "recommendationservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "adservice",
+        "namespace": "onlineboutique"
+      }
+    ]
+  }
+}

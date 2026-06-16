@@ -1,0 +1,109 @@
+{
+  "mode": "multi_workload",
+  "created_at": "2026-06-11T08:12:54.804966",
+  "app": "apps/onlineboutique",
+  "workload": "workloads/onlineboutique.yaml",
+  "locustfile": "app-configs/onlineboutique-locustfile.py",
+  "prom_url": "http://172.31.13.186:9090",
+  "energy_source": "auto",
+  "power_meter": null,
+  "count": 5,
+  "cooldown_seconds": 120,
+  "workload_levels": [
+    {
+      "label": "low",
+      "users": 40,
+      "spawn_rate": null,
+      "duration": null
+    },
+    {
+      "label": "medium",
+      "users": 100,
+      "spawn_rate": null,
+      "duration": null
+    },
+    {
+      "label": "high",
+      "users": 150,
+      "spawn_rate": null,
+      "duration": null
+    }
+  ],
+  "runs": [
+    {
+      "workload_label": "low",
+      "iteration": 1,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/low/iteration_20260611_081916_529877"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 2,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/low/iteration_20260611_082609_493475"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 3,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/low/iteration_20260611_083303_998512"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 4,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/low/iteration_20260611_083957_902985"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 5,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/low/iteration_20260611_084650_218171"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 1,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/medium/iteration_20260611_090037_037356"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 2,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/medium/iteration_20260611_090730_214120"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 3,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/medium/iteration_20260611_091420_862272"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 4,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/medium/iteration_20260611_092114_386325"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 5,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/medium/iteration_20260611_092807_470515"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 1,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/high/iteration_20260611_094245_378088"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 2,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/high/iteration_20260611_094940_527235"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 3,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/high/iteration_20260611_095635_104276"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 4,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/high/iteration_20260611_100326_953893"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 5,
+      "run_dir": "runs/20260611_081254_802436_onlineboutique/high/iteration_20260611_101021_248776"
+    }
+  ]
+}

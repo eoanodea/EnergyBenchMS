@@ -1,0 +1,70 @@
+{
+  "mode": "stepwise",
+  "created_at": "2026-05-19T18:56:28.355471",
+  "app": "apps/oteldemo",
+  "workload": "workloads/oteldemo.yaml",
+  "locustfile": "app-configs/oteldemo-locustfile.py",
+  "prom_url": "http://192.168.0.100:9090",
+  "energy_source": "auto",
+  "power_meter": {
+    "enabled": true,
+    "url": "http://192.168.0.105/rpc/Switch.GetStatus?id=0",
+    "interval_seconds": 1.0,
+    "request_timeout_seconds": 5.0,
+    "baseline_seconds": 120
+  },
+  "levels": [
+    20,
+    40,
+    60,
+    80,
+    100,
+    150,
+    200,
+    300,
+    500
+  ],
+  "dwell_seconds": 120,
+  "spawn_rate": 2.0,
+  "ramp_exclusion_seconds": 20,
+  "reset_between_levels": true,
+  "cooldown_seconds": 30,
+  "runs": [
+    {
+      "user_level": 20,
+      "run_dir": "runs/20260519_185047_497954_otel-demo/level_020_iteration_20260519_185628_357455"
+    },
+    {
+      "user_level": 40,
+      "run_dir": "runs/20260519_185047_497954_otel-demo/level_040_iteration_20260519_190210_004067"
+    },
+    {
+      "user_level": 60,
+      "run_dir": "runs/20260519_185047_497954_otel-demo/level_060_iteration_20260519_190752_462335"
+    },
+    {
+      "user_level": 80,
+      "run_dir": "runs/20260519_185047_497954_otel-demo/level_080_iteration_20260519_191351_352088"
+    },
+    {
+      "user_level": 100,
+      "run_dir": "runs/20260519_185047_497954_otel-demo/level_100_iteration_20260519_191931_317495"
+    },
+    {
+      "user_level": 150,
+      "run_dir": "runs/20260519_185047_497954_otel-demo/level_150_iteration_20260519_192511_106285"
+    },
+    {
+      "user_level": 200,
+      "run_dir": "runs/20260519_185047_497954_otel-demo/level_200_iteration_20260519_193051_307646"
+    },
+    {
+      "user_level": 300,
+      "run_dir": "runs/20260519_185047_497954_otel-demo/level_300_iteration_20260519_193629_428687"
+    },
+    {
+      "user_level": 500,
+      "run_dir": "runs/20260519_185047_497954_otel-demo/level_500_iteration_20260519_194206_258471"
+    }
+  ]
+}

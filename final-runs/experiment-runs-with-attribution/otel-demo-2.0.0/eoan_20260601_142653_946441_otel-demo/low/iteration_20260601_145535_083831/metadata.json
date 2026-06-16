@@ -1,0 +1,211 @@
+{
+  "app_path": "/home/eoan/sites/phd/controller/apps/oteldemo-2.0.0",
+  "workload_path": "/home/eoan/sites/phd/controller/workloads/oteldemo.yaml",
+  "workload_parameters": {
+    "target": "http://192.168.0.100:30450",
+    "users": 60,
+    "workload_levels": [
+      {
+        "low": 60
+      },
+      {
+        "medium": 150
+      },
+      {
+        "high": 200
+      }
+    ],
+    "spawn_rate": 5,
+    "duration": 120,
+    "port": 30450,
+    "saturation": {
+      "levels": [
+        20,
+        40,
+        60,
+        80,
+        100,
+        150,
+        200,
+        300,
+        500
+      ],
+      "dwell_seconds": 120,
+      "spawn_rate": 2,
+      "ramp_exclusion_seconds": 20,
+      "reset_between_levels": true,
+      "cooldown_seconds": 30
+    }
+  },
+  "workload_label": "low",
+  "experiment_status": "success",
+  "locust_exit_code": null,
+  "locust_error": null,
+  "locust_observed_error_rate": 0.0,
+  "locust_max_error_rate": 0.01,
+  "locust_error_rate_threshold_exceeded": false,
+  "ramp_exclusion_seconds": 0,
+  "baseline_seconds": 120,
+  "locust_artifacts": {
+    "stats_csv": "runs/20260601_142653_946441_otel-demo/low/iteration_20260601_145535_083831/locust_stats.csv",
+    "stats_history_csv": "runs/20260601_142653_946441_otel-demo/low/iteration_20260601_145535_083831/locust_stats_history.csv",
+    "failures_csv": "runs/20260601_142653_946441_otel-demo/low/iteration_20260601_145535_083831/locust_failures.csv",
+    "exceptions_csv": "runs/20260601_142653_946441_otel-demo/low/iteration_20260601_145535_083831/locust_exceptions.csv"
+  },
+  "timestamps": {
+    "experiment_start": "2026-06-01T14:56:40.498159",
+    "workload_start": "2026-06-01T14:59:03.836974",
+    "workload_effective_start": "2026-06-01T14:59:03.836974",
+    "workload_end": "2026-06-01T15:01:04.959344"
+  },
+  "power_meter": {
+    "enabled": true,
+    "url": "http://192.168.0.105/rpc/Switch.GetStatus?id=0",
+    "interval_seconds": 1.0,
+    "request_timeout_seconds": 5.0,
+    "energy_unit": "Wh",
+    "samples_csv": "runs/20260601_142653_946441_otel-demo/low/iteration_20260601_145535_083831/physical_power_meter.csv",
+    "baseline_seconds": 120,
+    "pid": 3929428,
+    "exit_code": 0,
+    "sample_count": 241
+  },
+  "time_source": {
+    "source": "prometheus_clock",
+    "prom_url": "http://192.168.0.100:9090",
+    "offset_seconds": 65.07264566421509,
+    "error": null
+  },
+  "sut_containers": [
+    "accounting",
+    "ad",
+    "cart",
+    "checkout",
+    "currency",
+    "email",
+    "flagd",
+    "fraud-detection",
+    "frontend",
+    "frontend-proxy",
+    "image-provider",
+    "kafka",
+    "llm",
+    "load-generator",
+    "payment",
+    "postgresql",
+    "product-catalog",
+    "product-reviews",
+    "quote",
+    "recommendation",
+    "shipping",
+    "valkey-cart"
+  ],
+  "sut_container_source": "deployment_targets",
+  "deployment": {
+    "manifest_source": "/home/eoan/sites/phd/controller/apps/oteldemo-2.0.0/otel-demo.yaml",
+    "namespace_override": "otel-demo",
+    "excluded_kinds": [],
+    "excluded_resource_patterns": [
+      "(^|/)loadgenerator($|[-/])",
+      "(^|/)grafana($|[-/])",
+      "(^|/)jaeger($|[-/])",
+      "(^|/)prometheus($|[-/])"
+    ],
+    "sut_name": "accounting",
+    "deployments": [
+      {
+        "name": "accounting",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "ad",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "cart",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "checkout",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "currency",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "email",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "flagd",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "fraud-detection",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "frontend",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "frontend-proxy",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "image-provider",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "kafka",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "llm",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "load-generator",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "payment",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "postgresql",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "product-catalog",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "product-reviews",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "quote",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "recommendation",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "shipping",
+        "namespace": "otel-demo"
+      },
+      {
+        "name": "valkey-cart",
+        "namespace": "otel-demo"
+      }
+    ]
+  },
+  "k8s_pod_snapshot": {
+    "captured": true,
+    "path": "runs/20260601_142653_946441_otel-demo/low/iteration_20260601_145535_083831/k8s_pod_snapshot.json",
+    "error": null
+  }
+}

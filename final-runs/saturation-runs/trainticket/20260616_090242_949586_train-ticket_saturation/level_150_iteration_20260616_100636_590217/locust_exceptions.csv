@@ -1,0 +1,127 @@
+Count,Message,Traceback,Nodes
+2,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 255, in query_admin_basic_price_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local
+1,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 284, in query_and_collect_ticket_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local
+4,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 329, in query_and_rebook_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local
+4,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 296, in query_and_enter_station_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local
+3,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 129, in query_advanced_ticket_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local
+2,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 390, in query_route_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local
+4,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 154, in query_and_preserve_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local
+2,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 363, in query_order_and_pay_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local
+3,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 308, in query_and_put_consign_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local
+1,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 113, in query_admin_basic_config_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local
+3,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 271, in query_and_cancel_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local
+3,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 419, in query_travel_left_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local
+1,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 401, in query_travel_left_parallel_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local
+1,"can only concatenate str (not ""NoneType"") to str","  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 363, in run
+    self.execute_next_task()
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 396, in execute_next_task
+    self.execute_task(self._task_queue.popleft())
+  File ""/home/ubuntu/energybench-env/lib/python3.10/site-packages/locust/user/task.py"", line 408, in execute_task
+    task(self)
+  File ""/home/ubuntu/EnergyBenchMS/app-configs/trainticket-locustfile.py"", line 347, in query_food_use
+    headers[""Authorization""] = ""Bearer "" + token
+",local

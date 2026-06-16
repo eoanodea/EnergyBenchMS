@@ -1,0 +1,128 @@
+{
+  "mode": "multi_workload",
+  "created_at": "2026-06-12T19:48:21.157406",
+  "app": "apps/oteldemo-2.0.0",
+  "workload": "workloads/oteldemo.yaml",
+  "locustfile": "app-configs/oteldemo-locustfile.py",
+  "prom_url": "http://192.168.0.100:9090",
+  "energy_source": "auto",
+  "power_meter": {
+    "enabled": true,
+    "url": "http://192.168.0.105/rpc/Switch.GetStatus?id=0",
+    "interval_seconds": 1.0,
+    "request_timeout_seconds": 5.0,
+    "baseline_seconds": 120
+  },
+  "count": 20,
+  "cooldown_seconds": 120,
+  "workload_levels": [
+    {
+      "label": "medium",
+      "users": 150,
+      "spawn_rate": null,
+      "duration": null
+    }
+  ],
+  "runs": [
+    {
+      "workload_label": "medium",
+      "iteration": 1,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_195548_309924"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 2,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_200300_159771"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 3,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_201011_482340"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 4,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_201721_461925"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 5,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_202430_481634"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 6,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_203202_939354"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 7,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_203931_453048"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 8,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_204645_360541"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 9,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_205357_497603"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 10,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_210125_005372"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 11,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_210834_563981"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 12,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_211544_694586"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 13,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_212252_542992"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 14,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_213002_166527"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 15,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_213714_531119"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 16,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_214431_064195"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 17,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_215159_420977"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 18,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_215928_774089"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 19,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_220639_369497"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 20,
+      "run_dir": "runs/20260612_194821_154588_otel-demo/medium/iteration_20260612_221408_352619"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "config": {
+    "plateau_threshold": 0.05,
+    "latency_jump_threshold": 0.3,
+    "error_rate_threshold": 0.01,
+    "cpu_threshold": 0.9
+  },
+  "row_count": 9,
+  "levels": [
+    20,
+    40,
+    60,
+    80,
+    100,
+    150,
+    200,
+    300,
+    500
+  ],
+  "signals": {
+    "throughput_plateau": null,
+    "degradation": {
+      "degradation_user_level": 40,
+      "reason": "latency_jump_threshold",
+      "latency_jump": 0.4661181349923071,
+      "latency_jump_threshold": 0.3,
+      "previous_p95_latency": 21.571428571428573,
+      "current_p95_latency": 31.626262626262626
+    },
+    "cpu_threshold": {
+      "cpu_threshold_user_level": 20,
+      "cpu_mean": 1.4983837056111942,
+      "cpu_threshold": 0.9
+    }
+  },
+  "max_throughput": {
+    "user_level": 500,
+    "throughput_mean": 140.6212121212121
+  }
+}

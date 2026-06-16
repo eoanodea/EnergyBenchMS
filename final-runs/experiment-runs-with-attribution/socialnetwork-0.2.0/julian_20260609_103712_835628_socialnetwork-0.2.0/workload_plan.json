@@ -1,0 +1,109 @@
+{
+  "mode": "multi_workload",
+  "created_at": "2026-06-09T10:37:12.837999",
+  "app": "apps/socialnetwork-0.2.0/",
+  "workload": "workloads/socialnetwork.yaml",
+  "locustfile": "app-configs/socialnetwork-locustfile.py",
+  "prom_url": "http://172.31.13.186:9090",
+  "energy_source": "auto",
+  "power_meter": null,
+  "count": 5,
+  "cooldown_seconds": 120,
+  "workload_levels": [
+    {
+      "label": "low",
+      "users": 40,
+      "spawn_rate": null,
+      "duration": null
+    },
+    {
+      "label": "medium",
+      "users": 150,
+      "spawn_rate": null,
+      "duration": null
+    },
+    {
+      "label": "high",
+      "users": 300,
+      "spawn_rate": null,
+      "duration": null
+    }
+  ],
+  "runs": [
+    {
+      "workload_label": "low",
+      "iteration": 1,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/low/iteration_20260609_104454_779097"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 2,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/low/iteration_20260609_105226_986607"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 3,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/low/iteration_20260609_105955_657499"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 4,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/low/iteration_20260609_110728_423777"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 5,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/low/iteration_20260609_111455_849329"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 1,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/medium/iteration_20260609_112952_663880"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 2,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/medium/iteration_20260609_113725_459878"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 3,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/medium/iteration_20260609_114451_586677"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 4,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/medium/iteration_20260609_115220_378165"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 5,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/medium/iteration_20260609_115947_994969"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 1,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/high/iteration_20260609_121440_023218"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 2,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/high/iteration_20260609_122210_397544"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 3,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/high/iteration_20260609_122938_422738"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 4,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/high/iteration_20260609_123707_928246"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 5,
+      "run_dir": "runs/20260609_103712_835628_compose-post-service/high/iteration_20260609_124435_306609"
+    }
+  ]
+}

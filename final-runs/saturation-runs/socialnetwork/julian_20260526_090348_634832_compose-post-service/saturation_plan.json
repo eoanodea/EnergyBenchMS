@@ -1,0 +1,49 @@
+{
+  "mode": "stepwise",
+  "created_at": "2026-05-26T09:09:58.493005",
+  "app": "apps/DeathStarBench/socialNetwork/deploy",
+  "workload": "workloads/socialnetwork.yaml",
+  "locustfile": "app-configs/socialnetwork-locustfile.py",
+  "prom_url": "http://172.31.13.186:9090",
+  "energy_source": "auto",
+  "power_meter": null,
+  "levels": [
+    20,
+    40,
+    60,
+    80,
+    100,
+    150
+  ],
+  "dwell_seconds": 120,
+  "spawn_rate": 2.0,
+  "ramp_exclusion_seconds": 20,
+  "reset_between_levels": true,
+  "cooldown_seconds": 30,
+  "runs": [
+    {
+      "user_level": 20,
+      "run_dir": "runs/20260526_090348_634832_compose-post-service/level_020_iteration_20260526_090958_493395"
+    },
+    {
+      "user_level": 40,
+      "run_dir": "runs/20260526_090348_634832_compose-post-service/level_040_iteration_20260526_091609_016293"
+    },
+    {
+      "user_level": 60,
+      "run_dir": "runs/20260526_090348_634832_compose-post-service/level_060_iteration_20260526_092216_867635"
+    },
+    {
+      "user_level": 80,
+      "run_dir": "runs/20260526_090348_634832_compose-post-service/level_080_iteration_20260526_092826_155727"
+    },
+    {
+      "user_level": 100,
+      "run_dir": "runs/20260526_090348_634832_compose-post-service/level_100_iteration_20260526_093436_282752"
+    },
+    {
+      "user_level": 150,
+      "run_dir": "runs/20260526_090348_634832_compose-post-service/level_150_iteration_20260526_094043_841564"
+    }
+  ]
+}

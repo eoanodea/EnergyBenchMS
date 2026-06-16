@@ -1,0 +1,331 @@
+{
+  "energy_by_container_name": {
+    "alertsnitch": {
+      "mean": 0.04761904761904763,
+      "max": 0.09090909090909091
+    },
+    "alertsnitch-mysql": {
+      "mean": 0.3333333333333333,
+      "max": 0.34545454545454546
+    },
+    "coredns": {
+      "mean": 1.3792207792207793,
+      "max": 1.7636363636363634
+    },
+    "elasticsearch-logging": {
+      "mean": 5.6822510822510806,
+      "max": 8.381818181818181
+    },
+    "jaeger": {
+      "mean": 0.026839826839826844,
+      "max": 0.07272727272727272
+    },
+    "kepler-exporter": {
+      "mean": 6.023376623376622,
+      "max": 7.2727272727272725
+    },
+    "kernel_processes": {
+      "mean": 653.2034632034632,
+      "max": 774.1272727272727
+    },
+    "kibana-logging": {
+      "mean": 0.7722943722943724,
+      "max": 0.8545454545454545
+    },
+    "lb-tcp-12340": {
+      "mean": 0.0,
+      "max": 0.0
+    },
+    "lb-tcp-443": {
+      "mean": 0.0,
+      "max": 0.0
+    },
+    "lb-tcp-80": {
+      "mean": 0.0,
+      "max": 0.0
+    },
+    "local-path-provisioner": {
+      "mean": 0.02077922077922078,
+      "max": 0.07272727272727272
+    },
+    "metrics-server": {
+      "mean": 2.496103896103896,
+      "max": 2.709090909090909
+    },
+    "node-exporter": {
+      "mean": 0.0,
+      "max": 0.0
+    },
+    "system_processes": {
+      "mean": 113.48138528138527,
+      "max": 143.6909090909091
+    },
+    "traefik": {
+      "mean": 0.2025974025974026,
+      "max": 0.3090909090909091
+    },
+    "ts-admin-basic-info-service": {
+      "mean": 11.621645021645021,
+      "max": 21.96363636363636
+    },
+    "ts-admin-order-service": {
+      "mean": 0.5896103896103896,
+      "max": 0.7090909090909091
+    },
+    "ts-admin-route-service": {
+      "mean": 0.6467532467532467,
+      "max": 0.9090909090909091
+    },
+    "ts-admin-travel-service": {
+      "mean": 0.572294372294372,
+      "max": 0.7272727272727273
+    },
+    "ts-admin-user-service": {
+      "mean": 0.6294372294372296,
+      "max": 0.7454545454545454
+    },
+    "ts-assurance-mongo": {
+      "mean": 2.7506493506493506,
+      "max": 3.036363636363636
+    },
+    "ts-assurance-service": {
+      "mean": 6.92987012987013,
+      "max": 21.49090909090909
+    },
+    "ts-auth-mongo": {
+      "mean": 3.8129870129870125,
+      "max": 4.363636363636363
+    },
+    "ts-auth-service": {
+      "mean": 158.29264069264065,
+      "max": 191.7090909090909
+    },
+    "ts-basic-service": {
+      "mean": 46.52034632034632,
+      "max": 138.1818181818182
+    },
+    "ts-cancel-service": {
+      "mean": 12.513419913419915,
+      "max": 25.745454545454542
+    },
+    "ts-config-mongo": {
+      "mean": 2.7653679653679655,
+      "max": 3.309090909090909
+    },
+    "ts-config-service": {
+      "mean": 14.479653679653682,
+      "max": 37.654545454545456
+    },
+    "ts-consign-mongo": {
+      "mean": 2.9272727272727272,
+      "max": 3.3454545454545452
+    },
+    "ts-consign-price-mongo": {
+      "mean": 2.8155844155844156,
+      "max": 3.0727272727272728
+    },
+    "ts-consign-price-service": {
+      "mean": 15.06233766233766,
+      "max": 32.90909090909091
+    },
+    "ts-consign-service": {
+      "mean": 10.25021645021645,
+      "max": 21.054545454545455
+    },
+    "ts-contacts-mongo": {
+      "mean": 2.7636363636363637,
+      "max": 3.1636363636363636
+    },
+    "ts-contacts-service": {
+      "mean": 6.10995670995671,
+      "max": 25.21818181818182
+    },
+    "ts-execute-service": {
+      "mean": 10.697835497835499,
+      "max": 20.727272727272727
+    },
+    "ts-food-map-mongo": {
+      "mean": 2.8761904761904757,
+      "max": 3.1999999999999997
+    },
+    "ts-food-map-service": {
+      "mean": 14.85281385281385,
+      "max": 31.581818181818182
+    },
+    "ts-food-mongo": {
+      "mean": 2.7835497835497836,
+      "max": 2.9454545454545453
+    },
+    "ts-food-service": {
+      "mean": 12.240692640692641,
+      "max": 26.672727272727272
+    },
+    "ts-inside-payment-mongo": {
+      "mean": 2.759307359307359,
+      "max": 3.1999999999999997
+    },
+    "ts-inside-payment-service": {
+      "mean": 42.690043290043285,
+      "max": 153.47272727272727
+    },
+    "ts-news-service": {
+      "mean": 0.0,
+      "max": 0.0
+    },
+    "ts-notification-service": {
+      "mean": 12.993073593073591,
+      "max": 39.50909090909091
+    },
+    "ts-order-mongo": {
+      "mean": 3.4389610389610383,
+      "max": 5.1454545454545455
+    },
+    "ts-order-other-mongo": {
+      "mean": 3.0995670995671003,
+      "max": 3.9636363636363634
+    },
+    "ts-order-other-service": {
+      "mean": 49.31688311688311,
+      "max": 155.47272727272727
+    },
+    "ts-order-service": {
+      "mean": 62.800865800865786,
+      "max": 178.3272727272727
+    },
+    "ts-payment-mongo": {
+      "mean": 2.747186147186147,
+      "max": 2.9818181818181815
+    },
+    "ts-payment-service": {
+      "mean": 6.8415584415584405,
+      "max": 13.563636363636363
+    },
+    "ts-preserve-other-service": {
+      "mean": 3.5307359307359305,
+      "max": 18.436363636363634
+    },
+    "ts-preserve-service": {
+      "mean": 4.673593073593072,
+      "max": 21.18181818181818
+    },
+    "ts-price-mongo": {
+      "mean": 2.8051948051948052,
+      "max": 3.109090909090909
+    },
+    "ts-price-service": {
+      "mean": 10.946320346320345,
+      "max": 25.927272727272726
+    },
+    "ts-rebook-service": {
+      "mean": 14.585281385281384,
+      "max": 29.709090909090907
+    },
+    "ts-route-mongo": {
+      "mean": 3.122077922077923,
+      "max": 4.3999999999999995
+    },
+    "ts-route-plan-service": {
+      "mean": 11.328138528138526,
+      "max": 22.509090909090908
+    },
+    "ts-route-service": {
+      "mean": 34.65887445887446,
+      "max": 106.0
+    },
+    "ts-seat-service": {
+      "mean": 15.371428571428572,
+      "max": 60.58181818181818
+    },
+    "ts-security-mongo": {
+      "mean": 2.701298701298701,
+      "max": 2.909090909090909
+    },
+    "ts-security-service": {
+      "mean": 5.479653679653679,
+      "max": 25.018181818181816
+    },
+    "ts-station-mongo": {
+      "mean": 4.186147186147186,
+      "max": 6.5636363636363635
+    },
+    "ts-station-service": {
+      "mean": 72.67619047619047,
+      "max": 176.1090909090909
+    },
+    "ts-ticket-office-mongo": {
+      "mean": 2.693506493506493,
+      "max": 3.127272727272727
+    },
+    "ts-ticket-office-service": {
+      "mean": 0.0,
+      "max": 0.0
+    },
+    "ts-ticketinfo-service": {
+      "mean": 40.19220779220779,
+      "max": 111.81818181818181
+    },
+    "ts-train-mongo": {
+      "mean": 3.159307359307359,
+      "max": 4.418181818181818
+    },
+    "ts-train-service": {
+      "mean": 22.163636363636364,
+      "max": 90.0
+    },
+    "ts-travel-mongo": {
+      "mean": 2.9255411255411254,
+      "max": 4.0
+    },
+    "ts-travel-plan-service": {
+      "mean": 10.033766233766235,
+      "max": 22.436363636363634
+    },
+    "ts-travel-service": {
+      "mean": 43.18268398268398,
+      "max": 117.25454545454545
+    },
+    "ts-travel2-mongo": {
+      "mean": 2.7974025974025976,
+      "max": 3.436363636363636
+    },
+    "ts-travel2-service": {
+      "mean": 24.460606060606057,
+      "max": 72.0909090909091
+    },
+    "ts-ui-dashboard": {
+      "mean": 1.361038961038961,
+      "max": 3.6727272727272724
+    },
+    "ts-user-mongo": {
+      "mean": 2.875324675324675,
+      "max": 3.109090909090909
+    },
+    "ts-user-service": {
+      "mean": 11.6,
+      "max": 27.527272727272727
+    },
+    "ts-verification-code-service": {
+      "mean": 0.6216450216450217,
+      "max": 0.7454545454545454
+    },
+    "ts-voucher-mysql": {
+      "mean": 0.29264069264069253,
+      "max": 0.32727272727272727
+    },
+    "ts-voucher-service": {
+      "mean": 0.0,
+      "max": 0.0
+    }
+  },
+  "cpu_k8s_by_id": {},
+  "cpu_total": {},
+  "workload": {
+    "throughput_mean_rps": 6.134343434343433,
+    "error_rate": 0.058784785114441,
+    "p95_latency": 39986.48648648649
+  },
+  "energy_source": {
+    "selected_energy_source": "bpf_cpu_time",
+    "requested_energy_source": "auto"
+  }
+}

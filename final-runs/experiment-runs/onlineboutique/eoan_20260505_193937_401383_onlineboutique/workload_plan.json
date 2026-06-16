@@ -1,0 +1,115 @@
+{
+  "mode": "multi_workload",
+  "created_at": "2026-05-05T19:39:37.403985",
+  "app": "apps/onlineboutique",
+  "workload": "workloads/onlineboutique.yaml",
+  "locustfile": "app-configs/onlineboutique-locustfile.py",
+  "prom_url": "http://192.168.0.100:9090",
+  "energy_source": "auto",
+  "power_meter": {
+    "enabled": true,
+    "url": "http://192.168.0.105/rpc/Switch.GetStatus?id=0",
+    "interval_seconds": 1.0,
+    "request_timeout_seconds": 5.0,
+    "baseline_seconds": 120
+  },
+  "count": 5,
+  "cooldown_seconds": 120,
+  "workload_levels": [
+    {
+      "label": "low",
+      "users": 40,
+      "spawn_rate": null,
+      "duration": null
+    },
+    {
+      "label": "medium",
+      "users": 80,
+      "spawn_rate": null,
+      "duration": null
+    },
+    {
+      "label": "high",
+      "users": 150,
+      "spawn_rate": null,
+      "duration": null
+    }
+  ],
+  "runs": [
+    {
+      "workload_label": "low",
+      "iteration": 1,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/low/iteration_20260505_194631_558884"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 2,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/low/iteration_20260505_195325_193104"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 3,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/low/iteration_20260505_200016_264141"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 4,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/low/iteration_20260505_200710_245855"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 5,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/low/iteration_20260505_201404_518282"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 1,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/medium/iteration_20260505_202750_581542"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 2,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/medium/iteration_20260505_203443_672915"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 3,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/medium/iteration_20260505_204137_225326"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 4,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/medium/iteration_20260505_204831_514072"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 5,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/medium/iteration_20260505_205524_478039"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 1,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/high/iteration_20260505_210911_388929"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 2,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/high/iteration_20260505_211604_988374"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 3,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/high/iteration_20260505_212256_949636"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 4,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/high/iteration_20260505_212951_200062"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 5,
+      "run_dir": "runs/20260505_193937_401383_onlineboutique/high/iteration_20260505_213644_724314"
+    }
+  ]
+}

@@ -1,0 +1,198 @@
+{
+  "app_path": "/home/ubuntu/EnergyBenchMS/apps/opentelemetry-demo/kubernetes",
+  "workload_path": "/home/ubuntu/EnergyBenchMS/workloads/oteldemo.yaml",
+  "workload_parameters": {
+    "target": "http://54.171.175.240:30450",
+    "users": 150,
+    "workload_levels": [
+      {
+        "low": 40
+      },
+      {
+        "medium": 150
+      },
+      {
+        "high": 300
+      }
+    ],
+    "spawn_rate": 5,
+    "duration": 120,
+    "port": 30450,
+    "saturation": {
+      "levels": [
+        20,
+        40,
+        60,
+        80,
+        100,
+        150,
+        200,
+        300,
+        500
+      ],
+      "dwell_seconds": 120,
+      "spawn_rate": 2,
+      "ramp_exclusion_seconds": 20,
+      "reset_between_levels": true,
+      "cooldown_seconds": 30
+    }
+  },
+  "workload_label": "medium",
+  "experiment_status": "success",
+  "locust_exit_code": null,
+  "locust_error": null,
+  "locust_observed_error_rate": 0.0,
+  "locust_max_error_rate": 0.01,
+  "locust_error_rate_threshold_exceeded": false,
+  "ramp_exclusion_seconds": 0,
+  "baseline_seconds": 120,
+  "locust_artifacts": {
+    "stats_csv": "runs/20260519_170512_449498_grafana/medium/iteration_20260519_174731_562522/locust_stats.csv",
+    "stats_history_csv": "runs/20260519_170512_449498_grafana/medium/iteration_20260519_174731_562522/locust_stats_history.csv",
+    "failures_csv": "runs/20260519_170512_449498_grafana/medium/iteration_20260519_174731_562522/locust_failures.csv",
+    "exceptions_csv": "runs/20260519_170512_449498_grafana/medium/iteration_20260519_174731_562522/locust_exceptions.csv"
+  },
+  "timestamps": {
+    "experiment_start": "2026-05-19T17:47:31.626655",
+    "workload_start": "2026-05-19T17:50:12.321307",
+    "workload_effective_start": "2026-05-19T17:50:12.321307",
+    "workload_end": "2026-05-19T17:52:12.646718"
+  },
+  "sut_containers": [
+    "grafana",
+    "jaeger",
+    "prometheus",
+    "accounting",
+    "ad",
+    "cart",
+    "checkout",
+    "currency",
+    "email",
+    "flagd",
+    "fraud-detection",
+    "frontend",
+    "frontend-proxy",
+    "image-provider",
+    "kafka",
+    "llm",
+    "load-generator",
+    "payment",
+    "postgresql",
+    "product-catalog",
+    "product-reviews",
+    "quote",
+    "recommendation",
+    "shipping",
+    "valkey-cart"
+  ],
+  "sut_container_source": "deployment_targets",
+  "deployment": {
+    "manifest_source": "/home/ubuntu/EnergyBenchMS/apps/opentelemetry-demo/kubernetes",
+    "namespace_override": null,
+    "excluded_kinds": [],
+    "excluded_resource_patterns": [],
+    "sut_name": "grafana",
+    "deployments": [
+      {
+        "name": "grafana",
+        "namespace": "default"
+      },
+      {
+        "name": "jaeger",
+        "namespace": null
+      },
+      {
+        "name": "prometheus",
+        "namespace": "default"
+      },
+      {
+        "name": "accounting",
+        "namespace": null
+      },
+      {
+        "name": "ad",
+        "namespace": null
+      },
+      {
+        "name": "cart",
+        "namespace": null
+      },
+      {
+        "name": "checkout",
+        "namespace": null
+      },
+      {
+        "name": "currency",
+        "namespace": null
+      },
+      {
+        "name": "email",
+        "namespace": null
+      },
+      {
+        "name": "flagd",
+        "namespace": null
+      },
+      {
+        "name": "fraud-detection",
+        "namespace": null
+      },
+      {
+        "name": "frontend",
+        "namespace": null
+      },
+      {
+        "name": "frontend-proxy",
+        "namespace": null
+      },
+      {
+        "name": "image-provider",
+        "namespace": null
+      },
+      {
+        "name": "kafka",
+        "namespace": null
+      },
+      {
+        "name": "llm",
+        "namespace": null
+      },
+      {
+        "name": "load-generator",
+        "namespace": null
+      },
+      {
+        "name": "payment",
+        "namespace": null
+      },
+      {
+        "name": "postgresql",
+        "namespace": null
+      },
+      {
+        "name": "product-catalog",
+        "namespace": null
+      },
+      {
+        "name": "product-reviews",
+        "namespace": null
+      },
+      {
+        "name": "quote",
+        "namespace": null
+      },
+      {
+        "name": "recommendation",
+        "namespace": null
+      },
+      {
+        "name": "shipping",
+        "namespace": null
+      },
+      {
+        "name": "valkey-cart",
+        "namespace": null
+      }
+    ]
+  }
+}

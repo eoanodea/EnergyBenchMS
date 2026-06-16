@@ -1,0 +1,157 @@
+{
+  "app_path": "/home/eoan/sites/phd/controller/apps/onlineboutique-0.10.0",
+  "workload_path": "/home/eoan/sites/phd/controller/workloads/onlineboutique.yaml",
+  "workload_parameters": {
+    "target": "http://192.168.0.100:30450",
+    "users": 150,
+    "workload_levels": [
+      {
+        "low": 40
+      },
+      {
+        "medium": 100
+      },
+      {
+        "high": 150
+      }
+    ],
+    "spawn_rate": 5,
+    "duration": 120,
+    "port": 30450,
+    "saturation": {
+      "levels": [
+        20,
+        40,
+        60,
+        80,
+        100,
+        150,
+        200,
+        300,
+        500
+      ],
+      "dwell_seconds": 120,
+      "spawn_rate": 5,
+      "ramp_exclusion_seconds": 20,
+      "reset_between_levels": true,
+      "cooldown_seconds": 120
+    }
+  },
+  "workload_label": "high",
+  "experiment_status": "failed",
+  "locust_exit_code": 1,
+  "locust_error": "Command '['locust', '-f', '/home/eoan/sites/phd/controller/app-configs/onlineboutique-locustfile.py', '--host', 'http://192.168.0.100:30450', '--users', '150', '--spawn-rate', '5', '--run-time', '120s', '--headless', '--csv', 'runs/20260610_162402_000654_onlineboutique/high/iteration_20260610_180827_993624/locust', '--csv-full-history']' returned non-zero exit status 1.",
+  "locust_observed_error_rate": 1.0,
+  "locust_max_error_rate": 0.01,
+  "locust_error_rate_threshold_exceeded": true,
+  "ramp_exclusion_seconds": 0,
+  "baseline_seconds": 120,
+  "locust_artifacts": {
+    "stats_csv": "runs/20260610_162402_000654_onlineboutique/high/iteration_20260610_180827_993624/locust_stats.csv",
+    "stats_history_csv": "runs/20260610_162402_000654_onlineboutique/high/iteration_20260610_180827_993624/locust_stats_history.csv",
+    "failures_csv": "runs/20260610_162402_000654_onlineboutique/high/iteration_20260610_180827_993624/locust_failures.csv",
+    "exceptions_csv": "runs/20260610_162402_000654_onlineboutique/high/iteration_20260610_180827_993624/locust_exceptions.csv"
+  },
+  "timestamps": {
+    "experiment_start": "2026-06-10T19:15:17.541306",
+    "workload_start": "2026-06-10T19:17:52.763586",
+    "workload_effective_start": "2026-06-10T19:17:52.763586",
+    "workload_end": "2026-06-10T19:19:53.826065"
+  },
+  "power_meter": {
+    "enabled": true,
+    "url": "http://192.168.0.105/rpc/Switch.GetStatus?id=0",
+    "interval_seconds": 1.0,
+    "request_timeout_seconds": 5.0,
+    "energy_unit": "Wh",
+    "samples_csv": "runs/20260610_162402_000654_onlineboutique/high/iteration_20260610_180827_993624/physical_power_meter.csv",
+    "baseline_seconds": 120,
+    "pid": 115701,
+    "exit_code": 0,
+    "sample_count": 241
+  },
+  "time_source": {
+    "source": "prometheus_clock",
+    "prom_url": "http://192.168.0.100:9090",
+    "offset_seconds": 4009.2732355594635,
+    "error": null
+  },
+  "sut_containers": [
+    "currencyservice",
+    "productcatalogservice",
+    "checkoutservice",
+    "shippingservice",
+    "cartservice",
+    "redis-cart",
+    "emailservice",
+    "paymentservice",
+    "frontend",
+    "recommendationservice",
+    "adservice"
+  ],
+  "sut_container_source": "deployment_targets",
+  "deployment": {
+    "manifest_source": "/home/eoan/sites/phd/controller/apps/onlineboutique-0.10.0/release/kubernetes-manifests.yaml",
+    "namespace_override": "onlineboutique",
+    "excluded_kinds": [],
+    "excluded_resource_patterns": [
+      "(^|/)loadgenerator($|[-/])",
+      "(^|/)prometheus($|[-/])",
+      "(^|/)grafana($|[-/])",
+      "(^|/)jaeger($|[-/])",
+      "(^|/)zipkin($|[-/])"
+    ],
+    "sut_name": "currencyservice",
+    "deployments": [
+      {
+        "name": "currencyservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "productcatalogservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "checkoutservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "shippingservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "cartservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "redis-cart",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "emailservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "paymentservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "frontend",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "recommendationservice",
+        "namespace": "onlineboutique"
+      },
+      {
+        "name": "adservice",
+        "namespace": "onlineboutique"
+      }
+    ]
+  },
+  "k8s_pod_snapshot": {
+    "captured": true,
+    "path": "runs/20260610_162402_000654_onlineboutique/high/iteration_20260610_180827_993624/k8s_pod_snapshot.json",
+    "error": null
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "mode": "multi_workload",
+  "created_at": "2026-06-12T15:09:21.704465",
+  "app": "apps/oteldemo-1.12.0",
+  "workload": "workloads/oteldemo.yaml",
+  "locustfile": "app-configs/oteldemo-locustfile.py",
+  "prom_url": "http://192.168.0.100:9090",
+  "energy_source": "auto",
+  "power_meter": {
+    "enabled": true,
+    "url": "http://192.168.0.105/rpc/Switch.GetStatus?id=0",
+    "interval_seconds": 1.0,
+    "request_timeout_seconds": 5.0,
+    "baseline_seconds": 120
+  },
+  "count": 20,
+  "cooldown_seconds": 120,
+  "workload_levels": [
+    {
+      "label": "medium",
+      "users": 150,
+      "spawn_rate": null,
+      "duration": null
+    }
+  ],
+  "runs": [
+    {
+      "workload_label": "medium",
+      "iteration": 1,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_151630_803736"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 2,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_152346_442081"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 3,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_153059_409047"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 4,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_153809_756886"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 5,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_154517_686678"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 6,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_155229_219418"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 7,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_155958_921612"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 8,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_160709_381967"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 9,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_161439_613119"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 10,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_162150_084546"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 11,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_162903_403085"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 12,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_163615_369062"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 13,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_164323_302814"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 14,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_165052_911653"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 15,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_165803_212600"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 16,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_170513_486339"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 17,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_171222_443100"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 18,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_171929_795912"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 19,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_172638_344263"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 20,
+      "run_dir": "runs/20260612_150921_702343_otel-demo/medium/iteration_20260612_173347_852681"
+    }
+  ]
+}

@@ -1,0 +1,156 @@
+{
+  "requested_energy_source": "auto",
+  "selected_energy_source": "joules",
+  "query_window": {
+    "workload_start": 1778142387.819666,
+    "workload_end": 1778142508.934061
+  },
+  "queries": {
+    "energy": {
+      "query_name": "energy",
+      "required_for": "summary",
+      "promql": "sum by (container_name) (rate(kepler_container_cpu_joules_total{container_name!=\"\"}[1m]))",
+      "output_filename": "energy.json",
+      "start": 1778142387.819666,
+      "end": 1778142508.934061,
+      "step": "5s",
+      "has_series": true,
+      "result_series_count": 11,
+      "error": null,
+      "requested_energy_source": "auto",
+      "selected_energy_source": "joules"
+    },
+    "cpu_total": {
+      "query_name": "cpu_total",
+      "required_for": "summary",
+      "promql": "sum(rate(container_cpu_usage_seconds_total[1m]))",
+      "output_filename": "cpu_total.json",
+      "start": 1778142387.819666,
+      "end": 1778142508.934061,
+      "step": "5s",
+      "has_series": true,
+      "result_series_count": 1,
+      "error": null
+    },
+    "cpu_by_container": {
+      "query_name": "cpu_by_container",
+      "required_for": "attribution_v1",
+      "promql": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[1m]))",
+      "output_filename": "cpu_by_container.json",
+      "start": 1778142387.819666,
+      "end": 1778142508.934061,
+      "step": "5s",
+      "has_series": true,
+      "result_series_count": 3,
+      "error": null
+    },
+    "cpu_by_name": {
+      "query_name": "cpu_by_name",
+      "required_for": "diagnostic",
+      "promql": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[1m]))",
+      "output_filename": "cpu_by_name.json",
+      "start": 1778142387.819666,
+      "end": 1778142508.934061,
+      "step": "5s",
+      "has_series": true,
+      "result_series_count": 3,
+      "error": null
+    },
+    "cpu_k8s_by_id": {
+      "query_name": "cpu_k8s_by_id",
+      "required_for": "attribution_v1",
+      "promql": "sum by (id) (rate(container_cpu_usage_seconds_total{id=~\".*cri-containerd-.*scope\"}[1m]))",
+      "output_filename": "cpu_k8s_by_id.json",
+      "start": 1778142387.819666,
+      "end": 1778142508.934061,
+      "step": "5s",
+      "has_series": true,
+      "result_series_count": 15,
+      "error": null
+    },
+    "memory_working_set": {
+      "query_name": "memory_working_set",
+      "required_for": "attribution_v2",
+      "promql": "sum by (name) (container_memory_working_set_bytes{name!=\"\"})",
+      "output_filename": "memory_working_set.json",
+      "start": 1778142387.819666,
+      "end": 1778142508.934061,
+      "step": "5s",
+      "has_series": true,
+      "result_series_count": 3,
+      "error": null
+    },
+    "network_rx": {
+      "query_name": "network_rx",
+      "required_for": "attribution_v2",
+      "promql": "sum by (name) (rate(container_network_receive_bytes_total{name!=\"\"}[1m]))",
+      "output_filename": "network_rx.json",
+      "start": 1778142387.819666,
+      "end": 1778142508.934061,
+      "step": "5s",
+      "has_series": true,
+      "result_series_count": 3,
+      "error": null
+    },
+    "network_tx": {
+      "query_name": "network_tx",
+      "required_for": "attribution_v2",
+      "promql": "sum by (name) (rate(container_network_transmit_bytes_total{name!=\"\"}[1m]))",
+      "output_filename": "network_tx.json",
+      "start": 1778142387.819666,
+      "end": 1778142508.934061,
+      "step": "5s",
+      "has_series": true,
+      "result_series_count": 3,
+      "error": null
+    },
+    "fs_reads": {
+      "query_name": "fs_reads",
+      "required_for": "attribution_v2",
+      "promql": "sum by (name) (rate(container_fs_reads_bytes_total{name!=\"\"}[1m]))",
+      "output_filename": "fs_reads.json",
+      "start": 1778142387.819666,
+      "end": 1778142508.934061,
+      "step": "5s",
+      "has_series": true,
+      "result_series_count": 3,
+      "error": null
+    },
+    "fs_writes": {
+      "query_name": "fs_writes",
+      "required_for": "attribution_v2",
+      "promql": "sum by (name) (rate(container_fs_writes_bytes_total{name!=\"\"}[1m]))",
+      "output_filename": "fs_writes.json",
+      "start": 1778142387.819666,
+      "end": 1778142508.934061,
+      "step": "5s",
+      "has_series": true,
+      "result_series_count": 3,
+      "error": null
+    },
+    "kube_pod_info": {
+      "query_name": "kube_pod_info",
+      "required_for": "diagnostic",
+      "promql": "kube_pod_info",
+      "output_filename": "kube_pod_info.json",
+      "start": 1778142387.819666,
+      "end": 1778142508.934061,
+      "step": "5s",
+      "has_series": false,
+      "result_series_count": 0,
+      "error": null
+    },
+    "kube_pod_container_info": {
+      "query_name": "kube_pod_container_info",
+      "required_for": "diagnostic",
+      "promql": "kube_pod_container_info",
+      "output_filename": "kube_pod_container_info.json",
+      "start": 1778142387.819666,
+      "end": 1778142508.934061,
+      "step": "5s",
+      "has_series": false,
+      "result_series_count": 0,
+      "error": null
+    }
+  }
+}

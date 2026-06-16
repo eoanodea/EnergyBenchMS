@@ -1,0 +1,70 @@
+{
+  "mode": "stepwise",
+  "created_at": "2026-06-03T16:46:19.143253",
+  "app": "apps/deathstarbench/socialnetwork",
+  "workload": "workloads/socialnetwork.yaml",
+  "locustfile": "app-configs/socialnetwork-locustfile.py",
+  "prom_url": "http://192.168.0.100:9090",
+  "energy_source": "auto",
+  "power_meter": {
+    "enabled": true,
+    "url": "http://192.168.0.105/rpc/Switch.GetStatus?id=0",
+    "interval_seconds": 1.0,
+    "request_timeout_seconds": 5.0,
+    "baseline_seconds": 120
+  },
+  "levels": [
+    20,
+    40,
+    60,
+    80,
+    100,
+    150,
+    200,
+    300,
+    500
+  ],
+  "dwell_seconds": 120,
+  "spawn_rate": 2.0,
+  "ramp_exclusion_seconds": 20,
+  "reset_between_levels": true,
+  "cooldown_seconds": 30,
+  "runs": [
+    {
+      "user_level": 20,
+      "run_dir": "runs/20260603_164001_464717_default/level_020_iteration_20260603_164619_146837"
+    },
+    {
+      "user_level": 40,
+      "run_dir": "runs/20260603_164001_464717_default/level_040_iteration_20260603_165234_301523"
+    },
+    {
+      "user_level": 60,
+      "run_dir": "runs/20260603_164001_464717_default/level_060_iteration_20260603_165850_393269"
+    },
+    {
+      "user_level": 80,
+      "run_dir": "runs/20260603_164001_464717_default/level_080_iteration_20260603_170508_650289"
+    },
+    {
+      "user_level": 100,
+      "run_dir": "runs/20260603_164001_464717_default/level_100_iteration_20260603_171124_998144"
+    },
+    {
+      "user_level": 150,
+      "run_dir": "runs/20260603_164001_464717_default/level_150_iteration_20260603_171741_510415"
+    },
+    {
+      "user_level": 200,
+      "run_dir": "runs/20260603_164001_464717_default/level_200_iteration_20260603_172358_897346"
+    },
+    {
+      "user_level": 300,
+      "run_dir": "runs/20260603_164001_464717_default/level_300_iteration_20260603_173016_963775"
+    },
+    {
+      "user_level": 500,
+      "run_dir": "runs/20260603_164001_464717_default/level_500_iteration_20260603_173632_968639"
+    }
+  ]
+}

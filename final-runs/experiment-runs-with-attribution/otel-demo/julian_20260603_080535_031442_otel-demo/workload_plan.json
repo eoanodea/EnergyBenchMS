@@ -1,0 +1,109 @@
+{
+  "mode": "multi_workload",
+  "created_at": "2026-06-03T08:05:35.035714",
+  "app": "apps/oteldemo",
+  "workload": "workloads/oteldemo.yaml",
+  "locustfile": "app-configs/oteldemo-locustfile.py",
+  "prom_url": "http://172.31.13.186:9090",
+  "energy_source": "auto",
+  "power_meter": null,
+  "count": 5,
+  "cooldown_seconds": 120,
+  "workload_levels": [
+    {
+      "label": "low",
+      "users": 40,
+      "spawn_rate": null,
+      "duration": null
+    },
+    {
+      "label": "medium",
+      "users": 150,
+      "spawn_rate": null,
+      "duration": null
+    },
+    {
+      "label": "high",
+      "users": 300,
+      "spawn_rate": null,
+      "duration": null
+    }
+  ],
+  "runs": [
+    {
+      "workload_label": "low",
+      "iteration": 1,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/low/iteration_20260603_081251_448565"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 2,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/low/iteration_20260603_081958_564189"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 3,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/low/iteration_20260603_082714_731583"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 4,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/low/iteration_20260603_083426_154911"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 5,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/low/iteration_20260603_084138_272900"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 1,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/medium/iteration_20260603_085559_274612"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 2,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/medium/iteration_20260603_090321_330451"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 3,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/medium/iteration_20260603_091031_020303"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 4,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/medium/iteration_20260603_091740_010007"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 5,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/medium/iteration_20260603_092450_359321"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 1,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/high/iteration_20260603_093910_151209"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 2,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/high/iteration_20260603_094615_539450"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 3,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/high/iteration_20260603_095326_373088"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 4,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/high/iteration_20260603_100034_729872"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 5,
+      "run_dir": "runs/20260603_080535_031442_otel-demo/high/iteration_20260603_100749_692801"
+    }
+  ]
+}

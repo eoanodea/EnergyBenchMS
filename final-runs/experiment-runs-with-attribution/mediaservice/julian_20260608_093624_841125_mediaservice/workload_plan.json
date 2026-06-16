@@ -1,0 +1,109 @@
+{
+  "mode": "multi_workload",
+  "created_at": "2026-06-08T09:36:24.843608",
+  "app": "apps/DeathStarBench/mediaMicroservices/deploy",
+  "workload": "workloads/mediaservice.yaml",
+  "locustfile": "app-configs/mediaservice-locustfile.py",
+  "prom_url": "http://172.31.13.186:9090",
+  "energy_source": "auto",
+  "power_meter": null,
+  "count": 5,
+  "cooldown_seconds": 120,
+  "workload_levels": [
+    {
+      "label": "low",
+      "users": 40,
+      "spawn_rate": null,
+      "duration": null
+    },
+    {
+      "label": "medium",
+      "users": 150,
+      "spawn_rate": null,
+      "duration": null
+    },
+    {
+      "label": "high",
+      "users": 300,
+      "spawn_rate": null,
+      "duration": null
+    }
+  ],
+  "runs": [
+    {
+      "workload_label": "low",
+      "iteration": 1,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/low/iteration_20260608_094307_818613"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 2,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/low/iteration_20260608_094952_412536"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 3,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/low/iteration_20260608_095635_252168"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 4,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/low/iteration_20260608_100317_680067"
+    },
+    {
+      "workload_label": "low",
+      "iteration": 5,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/low/iteration_20260608_101006_392502"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 1,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/medium/iteration_20260608_102339_983265"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 2,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/medium/iteration_20260608_103028_132460"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 3,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/medium/iteration_20260608_103713_779764"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 4,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/medium/iteration_20260608_104356_842125"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 5,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/medium/iteration_20260608_105042_172975"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 1,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/high/iteration_20260608_110413_777374"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 2,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/high/iteration_20260608_111056_594242"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 3,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/high/iteration_20260608_111747_885959"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 4,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/high/iteration_20260608_112435_602434"
+    },
+    {
+      "workload_label": "high",
+      "iteration": 5,
+      "run_dir": "runs/20260608_093624_841125_cast-info-memcached/high/iteration_20260608_113125_882295"
+    }
+  ]
+}

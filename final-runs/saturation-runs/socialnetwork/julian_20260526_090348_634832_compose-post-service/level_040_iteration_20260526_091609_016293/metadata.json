@@ -1,0 +1,205 @@
+{
+  "app_path": "/home/ubuntu/EnergyBenchMS/apps/DeathStarBench/socialNetwork/deploy",
+  "workload_path": "/home/ubuntu/EnergyBenchMS/workloads/socialnetwork.yaml",
+  "workload_parameters": {
+    "target": "http://54.171.175.240:32554",
+    "users": 40,
+    "workload_levels": [
+      {
+        "low": 20
+      },
+      {
+        "medium": 50
+      },
+      {
+        "high": 100
+      }
+    ],
+    "spawn_rate": 2.0,
+    "duration": 120,
+    "port": 32554,
+    "saturation": {
+      "levels": [
+        20,
+        40,
+        60,
+        80,
+        100,
+        150
+      ],
+      "dwell_seconds": 120,
+      "spawn_rate": 2,
+      "ramp_exclusion_seconds": 20,
+      "reset_between_levels": true,
+      "cooldown_seconds": 30
+    }
+  },
+  "workload_label": null,
+  "experiment_status": "success",
+  "locust_exit_code": null,
+  "locust_error": null,
+  "locust_observed_error_rate": 0.0,
+  "locust_max_error_rate": 0.01,
+  "locust_error_rate_threshold_exceeded": false,
+  "ramp_exclusion_seconds": 20,
+  "baseline_seconds": 120,
+  "locust_artifacts": {
+    "stats_csv": "runs/20260526_090348_634832_compose-post-service/level_040_iteration_20260526_091609_016293/locust_stats.csv",
+    "stats_history_csv": "runs/20260526_090348_634832_compose-post-service/level_040_iteration_20260526_091609_016293/locust_stats_history.csv",
+    "failures_csv": "runs/20260526_090348_634832_compose-post-service/level_040_iteration_20260526_091609_016293/locust_failures.csv",
+    "exceptions_csv": "runs/20260526_090348_634832_compose-post-service/level_040_iteration_20260526_091609_016293/locust_exceptions.csv"
+  },
+  "timestamps": {
+    "experiment_start": "2026-05-26T09:16:09.109962",
+    "workload_start": "2026-05-26T09:19:28.427292",
+    "workload_effective_start": "2026-05-26T09:19:48.427292",
+    "workload_end": "2026-05-26T09:21:28.751204"
+  },
+  "sut_containers": [
+    "compose-post-service",
+    "home-timeline-redis",
+    "home-timeline-service",
+    "jaeger",
+    "media-frontend",
+    "media-memcached",
+    "media-mongodb",
+    "media-service",
+    "nginx-thrift",
+    "post-storage-memcached",
+    "post-storage-mongodb",
+    "post-storage-service",
+    "social-graph-mongodb",
+    "social-graph-redis",
+    "social-graph-service",
+    "text-service",
+    "unique-id-service",
+    "url-shorten-memcached",
+    "url-shorten-mongodb",
+    "url-shorten-service",
+    "user-memcached",
+    "user-mention-service",
+    "user-mongodb",
+    "user-service",
+    "user-timeline-mongodb",
+    "user-timeline-redis",
+    "user-timeline-service"
+  ],
+  "sut_container_source": "deployment_targets",
+  "deployment": {
+    "manifest_source": "/home/ubuntu/EnergyBenchMS/apps/DeathStarBench/socialNetwork/deploy",
+    "namespace_override": null,
+    "excluded_kinds": [],
+    "excluded_resource_patterns": [],
+    "sut_name": "compose-post-service",
+    "deployments": [
+      {
+        "name": "compose-post-service",
+        "namespace": null
+      },
+      {
+        "name": "home-timeline-redis",
+        "namespace": null
+      },
+      {
+        "name": "home-timeline-service",
+        "namespace": null
+      },
+      {
+        "name": "jaeger",
+        "namespace": null
+      },
+      {
+        "name": "media-frontend",
+        "namespace": null
+      },
+      {
+        "name": "media-memcached",
+        "namespace": null
+      },
+      {
+        "name": "media-mongodb",
+        "namespace": null
+      },
+      {
+        "name": "media-service",
+        "namespace": null
+      },
+      {
+        "name": "nginx-thrift",
+        "namespace": null
+      },
+      {
+        "name": "post-storage-memcached",
+        "namespace": null
+      },
+      {
+        "name": "post-storage-mongodb",
+        "namespace": null
+      },
+      {
+        "name": "post-storage-service",
+        "namespace": null
+      },
+      {
+        "name": "social-graph-mongodb",
+        "namespace": null
+      },
+      {
+        "name": "social-graph-redis",
+        "namespace": null
+      },
+      {
+        "name": "social-graph-service",
+        "namespace": null
+      },
+      {
+        "name": "text-service",
+        "namespace": null
+      },
+      {
+        "name": "unique-id-service",
+        "namespace": null
+      },
+      {
+        "name": "url-shorten-memcached",
+        "namespace": null
+      },
+      {
+        "name": "url-shorten-mongodb",
+        "namespace": null
+      },
+      {
+        "name": "url-shorten-service",
+        "namespace": null
+      },
+      {
+        "name": "user-memcached",
+        "namespace": null
+      },
+      {
+        "name": "user-mention-service",
+        "namespace": null
+      },
+      {
+        "name": "user-mongodb",
+        "namespace": null
+      },
+      {
+        "name": "user-service",
+        "namespace": null
+      },
+      {
+        "name": "user-timeline-mongodb",
+        "namespace": null
+      },
+      {
+        "name": "user-timeline-redis",
+        "namespace": null
+      },
+      {
+        "name": "user-timeline-service",
+        "namespace": null
+      }
+    ]
+  }
+}

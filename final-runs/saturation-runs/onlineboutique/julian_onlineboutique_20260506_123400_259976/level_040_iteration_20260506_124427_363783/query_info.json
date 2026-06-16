@@ -1,0 +1,8 @@
+{
+  "requested_energy_source": "auto",
+  "selected_energy_source": "bpf_cpu_time",
+  "query_window": {
+    "workload_start": 1778071522.938599,
+    "workload_end": 1778071643.218463
+  }
+}

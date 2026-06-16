@@ -1,0 +1,128 @@
+{
+  "mode": "multi_workload",
+  "created_at": "2026-06-12T11:53:11.225856",
+  "app": "apps/oteldemo",
+  "workload": "workloads/oteldemo.yaml",
+  "locustfile": "app-configs/oteldemo-locustfile.py",
+  "prom_url": "http://192.168.0.100:9090",
+  "energy_source": "auto",
+  "power_meter": {
+    "enabled": true,
+    "url": "http://192.168.0.105/rpc/Switch.GetStatus?id=0",
+    "interval_seconds": 1.0,
+    "request_timeout_seconds": 5.0,
+    "baseline_seconds": 120
+  },
+  "count": 20,
+  "cooldown_seconds": 120,
+  "workload_levels": [
+    {
+      "label": "medium",
+      "users": 150,
+      "spawn_rate": null,
+      "duration": null
+    }
+  ],
+  "runs": [
+    {
+      "workload_label": "medium",
+      "iteration": 1,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_120019_634363"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 2,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_120728_577542"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 3,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_121440_429852"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 4,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_122153_267054"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 5,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_122907_794563"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 6,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_123615_231589"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 7,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_124328_451988"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 8,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_125056_358378"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 9,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_125810_469287"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 10,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_130520_636369"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 11,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_131232_298490"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 12,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_131943_703185"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 13,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_132650_290472"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 14,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_133402_013774"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 15,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_134109_490045"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 16,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_134820_349840"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 17,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_135531_808388"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 18,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_140237_498179"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 19,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_140949_215568"
+    },
+    {
+      "workload_label": "medium",
+      "iteration": 20,
+      "run_dir": "runs/20260612_115311_222031_otel-demo/medium/iteration_20260612_141700_623848"
+    }
+  ]
+}
