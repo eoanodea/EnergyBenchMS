@@ -91,6 +91,15 @@ def append_locust_quality_overrides(command, args):
         command.extend(["--max-error-rate", str(args.max_error_rate)])
 
 
+def append_sut_ready_timeout_override(command, args):
+    """Append SUT readiness timeout for run_experiment invocations."""
+    if args.sut_ready_timeout_seconds is not None:
+        command.extend([
+            "--sut-ready-timeout-seconds",
+            str(args.sut_ready_timeout_seconds),
+        ])
+
+
 def append_prometheus_override(command, args):
     """Append Prometheus URL for run_experiment time alignment."""
     if args.prom_url:
@@ -555,6 +564,15 @@ def build_parser():
         ),
     )
     parser.add_argument(
+        "--sut-ready-timeout-seconds",
+        type=int,
+        default=300,
+        help=(
+            "How long to wait for SUT deployments to become ready before failing "
+            "(default: 300). Passed to run_experiment.py."
+        ),
+    )
+    parser.add_argument(
         "--cooldown-seconds",
         type=int,
         default=0,
@@ -705,6 +723,7 @@ def main():
         ]
         append_baseline_override(warmup_cmd, args)
         append_locust_quality_overrides(warmup_cmd, args)
+        append_sut_ready_timeout_override(warmup_cmd, args)
         append_prometheus_override(warmup_cmd, args)
         append_deployment_overrides(warmup_cmd, args)
         run_step(warmup_cmd, "Running warmup")
@@ -762,6 +781,7 @@ def main():
             ]
             append_baseline_override(run_experiment_cmd, args)
             append_locust_quality_overrides(run_experiment_cmd, args)
+            append_sut_ready_timeout_override(run_experiment_cmd, args)
             append_prometheus_override(run_experiment_cmd, args)
             append_deployment_overrides(run_experiment_cmd, args)
             append_power_meter_overrides(run_experiment_cmd, args)
@@ -874,6 +894,7 @@ def main():
                 ]
                 append_baseline_override(warmup_cmd, args)
                 append_locust_quality_overrides(warmup_cmd, args)
+                append_sut_ready_timeout_override(warmup_cmd, args)
                 append_prometheus_override(warmup_cmd, args)
                 if workload_level.get("spawn_rate") is not None:
                     warmup_cmd.extend(["--spawn-rate", str(workload_level["spawn_rate"])])
@@ -908,6 +929,7 @@ def main():
                     ]
                     append_baseline_override(run_experiment_cmd, args)
                     append_locust_quality_overrides(run_experiment_cmd, args)
+                    append_sut_ready_timeout_override(run_experiment_cmd, args)
                     append_prometheus_override(run_experiment_cmd, args)
                     if workload_level.get("spawn_rate") is not None:
                         run_experiment_cmd.extend(["--spawn-rate", str(workload_level["spawn_rate"])])
@@ -967,6 +989,7 @@ def main():
             ]
             append_baseline_override(warmup_cmd, args)
             append_locust_quality_overrides(warmup_cmd, args)
+            append_sut_ready_timeout_override(warmup_cmd, args)
             append_prometheus_override(warmup_cmd, args)
             append_deployment_overrides(warmup_cmd, args)
             run_step(warmup_cmd, "Running warmup")
@@ -989,6 +1012,7 @@ def main():
                 ]
                 append_baseline_override(run_experiment_cmd, args)
                 append_locust_quality_overrides(run_experiment_cmd, args)
+                append_sut_ready_timeout_override(run_experiment_cmd, args)
                 append_prometheus_override(run_experiment_cmd, args)
                 append_deployment_overrides(run_experiment_cmd, args)
                 append_power_meter_overrides(run_experiment_cmd, args)
