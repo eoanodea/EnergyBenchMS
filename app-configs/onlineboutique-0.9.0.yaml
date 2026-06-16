@@ -1,0 +1,25 @@
+manifest_path: release/kubernetes-manifests.yaml
+namespace: onlineboutique
+
+resource_overrides:
+  - kind: Service
+    name: frontend-external
+    namespace: onlineboutique
+    patch:
+      spec:
+        ports:
+          - port: 80
+            targetPort: 8080
+            nodePort: 30427
+
+exclude_resource_patterns:
+  - "(^|/)loadgenerator($|[-/])"
+  - "(^|/)prometheus($|[-/])"
+  - "(^|/)grafana($|[-/])"
+  - "(^|/)jaeger($|[-/])"
+  - "(^|/)zipkin($|[-/])"
+
+attribution:
+  service_overrides: {}
+  service_groups: {}
+  ignore_patterns: []
