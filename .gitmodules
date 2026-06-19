@@ -34,3 +34,9 @@
 [submodule "apps/train-ticket"]
 	path = apps/train-ticket
 	url = git@github.com:FudanSELab/train-ticket.git
+[submodule "apps/train-ticket-0.2.0"]
+	path = apps/train-ticket-0.2.0
+	url = git@github.com:FudanSELab/train-ticket.git
+[submodule "apps/train-ticket-0.0.4"]
+	path = apps/train-ticket-0.0.4
+	url = git@github.com:FudanSELab/train-ticket.git
