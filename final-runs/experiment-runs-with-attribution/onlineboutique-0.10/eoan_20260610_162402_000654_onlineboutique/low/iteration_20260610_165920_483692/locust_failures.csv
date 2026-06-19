@@ -1,2 +1,0 @@
-Method,Name,Error,Occurrences
-GET,/,"ConnectTimeoutError(<urllib3.connection.HTTPConnection object at 0x....>, 'Connection to 192.168.0.100 timed out. (connect timeout=5)')",11

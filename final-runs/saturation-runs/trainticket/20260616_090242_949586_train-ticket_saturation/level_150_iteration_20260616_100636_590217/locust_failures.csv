@@ -1,5 +1,0 @@
-Method,Name,Error,Occurrences
-POST,/api/v1/travelservice/trips/left_parallel,HTTPError('405 Client Error:  for url: /api/v1/travelservice/trips/left_parallel'),8
-POST,/api/v1/travelplanservice/travelPlan/quickest,HTTPError('504 Server Error: Gateway Time-out for url: /api/v1/travelplanservice/travelPlan/quickest'),3
-POST,/api/v1/users/login,HTTPError('504 Server Error: Gateway Time-out for url: /api/v1/users/login'),34
-GET,/api/v1/routeservice/routes/92708982-77af-4318-be25-57ccb0ff69ad,HTTPError('404 Client Error: Not Found for url: /api/v1/routeservice/routes/92708982-77af-4318-be25-57ccb0ff69ad'),9

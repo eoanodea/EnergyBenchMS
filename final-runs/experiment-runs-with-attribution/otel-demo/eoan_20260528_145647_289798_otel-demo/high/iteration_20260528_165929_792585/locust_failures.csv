@@ -1,2 +1,0 @@
-Method,Name,Error,Occurrences
-GET,/,HTTPError('503 Server Error: Service Unavailable for url: /'),1

@@ -1,8 +1,0 @@
-{
-  "requested_energy_source": "auto",
-  "selected_energy_source": "joules",
-  "query_window": {
-    "workload_start": 1777991580.42327,
-    "workload_end": 1777991701.508905
-  }
-}
