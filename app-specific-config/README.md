@@ -25,8 +25,26 @@ cp app-specific-config/socialnetwork/social-network.yaml apps/deathstarbench/soc
 Replace `deployment/kubetnetes-manifests/k8s-with-jaeger` with the `k8s-with-jaeger` directory
 
 ```
-cp -r app-specific-config/trainticket/k8s-with-jaeger apps/train-ticket/deployment/kubernetes-manifests/k8s-with-jaeger
+cp -r app-specific-config/trainticket/k8s-with-jaeger apps/train-ticket/deployment/kubernetes-manifests
 ```
+
+## Train Ticket 0.2.0
+
+Replace `deployment/kubernetes-manifests/k8s-with-jaeger` with the `k8s-with-jaeger` directory
+
+```
+cp -r app-specific-config/trainticket-0.2.0/k8s-with-jaeger apps/train-ticket-0.2.0/deployment/kubernetes-manifests
+```
+
+## Train Ticket 0.0.4
+
+Replace `deployment/kubernetes-manifests/k8s-with-jaeger` with the `k8s-with-jaeger` directory
+
+```
+cp -r app-specific-config/trainticket-0.0.4/k8s-with-jaeger apps/train-ticket-0.0.4/deployment/kubernetes-manifests
+```
+
+
 
 ## Online Boutique
 
