@@ -1,4 +1,4 @@
-manifest_path: deployment/quickstart-k8s-deployment
+manifest_path: deployment/k8s-deployment
 namespace: train-ticket
 
 resource_overrides:

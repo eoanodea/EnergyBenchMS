@@ -38,10 +38,10 @@ cp -r app-specific-config/trainticket-0.2.0/k8s-with-jaeger apps/train-ticket-0.
 
 ## Train Ticket 0.0.4
 
-Replace `deployment/kubernetes-manifests/k8s-with-jaeger` with the `k8s-with-jaeger` directory
+Replace `deployment/kubernetes-manifests/k8s-deployment` with the `k8s-deployment` directory
 
 ```
-cp -r app-specific-config/trainticket-0.0.4/k8s-with-jaeger apps/train-ticket-0.0.4/deployment/kubernetes-manifests
+cp -r app-specific-config/trainticket-0.0.4/k8s-deployment apps/train-ticket-0.0.4/deployment
 ```
 
 
