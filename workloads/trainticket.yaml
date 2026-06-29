@@ -1,9 +1,9 @@
 target: http://192.168.0.100:32677
 users: 60
 workload_levels:
-  - low: 40
-  - medium: 150
-  - high: 300
+  - low: 20
+  - medium: 100
+  - high: 200
 spawn_rate: 5
 duration: 120
 port: 32554
@@ -14,3 +14,5 @@ saturation:
   ramp_exclusion_seconds: 20
   reset_between_levels: true
   cooldown_seconds: 30
+
+#  locust -f app-configs/trainticket-locustfile.py --host http://192.168.0.100:32677 --users 5 --spawn-rate 5 --run-time 120s
