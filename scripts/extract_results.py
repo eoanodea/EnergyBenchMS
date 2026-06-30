@@ -5,6 +5,7 @@ Outputs:
   results_aggregates.csv       — one row per (html_file × workload_level)
   results_m2_top_services.csv  — one row per (html_file × workload_level × top-5 service)
     results_m1_top_services.csv  — one row per (html_file × workload_level × top-5 service)
+    results_m1_vs_m2_energy.csv  — M1 total-attributed vs M2 Etotal, per experiment/workload
   diagnostics_cv.csv           — CV across repetitions per run × level × key metric
   diagnostics_epr_trend.csv    — energy-per-request trend across low/medium/high
   diagnostics_cross_release.csv — cross-release delta in total energy and top service share
@@ -118,6 +119,21 @@ ITERATION_CSV_FIELDS = [
     "cpu_mean",                    # mean CPU utilisation over iteration (from runs array)
     "cpu_p80",                     # p80 of CPU time-series (from cpu_total.json)
     "error_rate",
+]
+
+M1_M2_ENERGY_CSV_FIELDS = [
+    "source_folder",
+    "app_name",
+    "machine",
+    "experiment_name",
+    "workload_level",
+    "m1_iterations",
+    "m2_iterations",
+    "m1_total_attributed_energy_joules",
+    "m1_mean_attributed_energy_joules",
+    "m2_etotal_joules",
+    "m2_mean_etotal_joules",
+    "m1_to_m2_ratio",
 ]
 
 
@@ -263,6 +279,103 @@ def top5_m2_services(attribution_phase1: dict, workload_level: str) -> list[dict
 
 def top5_m1_services(attribution_phase1: dict, workload_level: str) -> list[dict]:
     return top5_model_services(attribution_phase1, workload_level, "M1")
+
+
+def extract_m1_vs_m2_energy_rows(
+    attribution_phase1: dict,
+    source_folder: str,
+    app_name: str,
+    machine: str,
+    experiment_name: str,
+) -> list[dict]:
+    """Extract per-workload and overall M1-vs-M2 energy summaries for one experiment.
+
+    Values come from attribution_phase1.workloads.*.sum_consistency checks:
+      - M1 total attributed energy from M1 reference_sum (or service_sum fallback)
+      - M2 Etotal from M2 reference_sum (or service_sum fallback)
+    """
+    workloads = attribution_phase1.get("workloads", {})
+    if not isinstance(workloads, dict):
+        return []
+
+    level_order = {"low": 0, "medium": 1, "high": 2}
+
+    def model_values(workload_data: dict, model: str) -> list[float]:
+        checks = (
+            workload_data.get("sum_consistency", {})
+            .get(model, {})
+            .get("checks", [])
+        )
+        values = []
+        for c in checks:
+            ref = safe_float(c.get("reference_sum"))
+            svc = safe_float(c.get("service_sum"))
+            v = ref if ref is not None else svc
+            if v is not None:
+                values.append(v)
+        return values
+
+    rows = []
+    all_m1_vals = []
+    all_m2_vals = []
+
+    for level, workload_data in sorted(
+        workloads.items(), key=lambda kv: (level_order.get(kv[0], 99), kv[0])
+    ):
+        m1_vals = model_values(workload_data, "M1")
+        m2_vals = model_values(workload_data, "M2")
+
+        all_m1_vals.extend(m1_vals)
+        all_m2_vals.extend(m2_vals)
+
+        m1_total = sum(m1_vals) if m1_vals else None
+        m2_total = sum(m2_vals) if m2_vals else None
+        m1_mean = (m1_total / len(m1_vals)) if m1_vals else None
+        m2_mean = (m2_total / len(m2_vals)) if m2_vals else None
+        ratio = (m1_mean / m2_mean) if m1_mean is not None and m2_mean not in (None, 0) else None
+
+        rows.append({
+            "source_folder": source_folder,
+            "app_name": app_name,
+            "machine": machine,
+            "experiment_name": experiment_name,
+            "workload_level": level,
+            "m1_iterations": len(m1_vals),
+            "m2_iterations": len(m2_vals),
+            "m1_total_attributed_energy_joules": m1_total,
+            "m1_mean_attributed_energy_joules": m1_mean,
+            "m2_etotal_joules": m2_total,
+            "m2_mean_etotal_joules": m2_mean,
+            "m1_to_m2_ratio": ratio,
+        })
+
+    # Overall row across all workload levels for this experiment.
+    m1_total_all = sum(all_m1_vals) if all_m1_vals else None
+    m2_total_all = sum(all_m2_vals) if all_m2_vals else None
+    m1_mean_all = (m1_total_all / len(all_m1_vals)) if all_m1_vals else None
+    m2_mean_all = (m2_total_all / len(all_m2_vals)) if all_m2_vals else None
+    ratio_all = (
+        m1_mean_all / m2_mean_all
+        if m1_mean_all is not None and m2_mean_all not in (None, 0)
+        else None
+    )
+
+    rows.append({
+        "source_folder": source_folder,
+        "app_name": app_name,
+        "machine": machine,
+        "experiment_name": experiment_name,
+        "workload_level": "all",
+        "m1_iterations": len(all_m1_vals),
+        "m2_iterations": len(all_m2_vals),
+        "m1_total_attributed_energy_joules": m1_total_all,
+        "m1_mean_attributed_energy_joules": m1_mean_all,
+        "m2_etotal_joules": m2_total_all,
+        "m2_mean_etotal_joules": m2_mean_all,
+        "m1_to_m2_ratio": ratio_all,
+    })
+
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -457,6 +570,7 @@ def main():
     service_rows = []
     service_rows_m1 = []
     iteration_rows = []
+    m1_m2_energy_rows = []
 
     for html_path in html_files:
         source_folder = html_path.parent.name
@@ -523,6 +637,16 @@ def main():
 
             print(f"  OK — {agg_count} level aggregate row(s), {svc_count} M2 service row(s), {svc_count_m1} M1 service row(s)")
 
+            m1_m2_energy_rows.extend(
+                extract_m1_vs_m2_energy_rows(
+                    attribution_phase1,
+                    source_folder,
+                    app_name,
+                    machine,
+                    experiment_name,
+                )
+            )
+
             # Per-iteration extraction (workstation only — EC2 lacks cpu_total.json)
             if machine == 'workstation':
                 experiment_dir = html_path.parent
@@ -562,6 +686,7 @@ def main():
     write_csv(out / "diagnostics_epr_trend.csv",   EPR_TREND_CSV_FIELDS,    compute_epr_trend(aggregate_rows))
     write_csv(out / "diagnostics_cross_release.csv", CROSS_RELEASE_CSV_FIELDS, compute_cross_release_delta(aggregate_rows, service_rows))
     write_csv(out / "results_iterations_ws.csv",   ITERATION_CSV_FIELDS,    iteration_rows)
+    write_csv(out / "results_m1_vs_m2_energy.csv", M1_M2_ENERGY_CSV_FIELDS, m1_m2_energy_rows)
 
 
 if __name__ == "__main__":
