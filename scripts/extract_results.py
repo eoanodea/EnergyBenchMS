@@ -4,6 +4,7 @@
 Outputs:
   results_aggregates.csv       — one row per (html_file × workload_level)
   results_m2_top_services.csv  — one row per (html_file × workload_level × top-5 service)
+    results_m1_top_services.csv  — one row per (html_file × workload_level × top-5 service)
   diagnostics_cv.csv           — CV across repetitions per run × level × key metric
   diagnostics_epr_trend.csv    — energy-per-request trend across low/medium/high
   diagnostics_cross_release.csv — cross-release delta in total energy and top service share
@@ -236,10 +237,10 @@ def find_html_files(base_dir: Path) -> list[Path]:
     return files
 
 
-def top5_m2_services(attribution_phase1: dict, workload_level: str) -> list[dict]:
+def top5_model_services(attribution_phase1: dict, workload_level: str, model: str) -> list[dict]:
     workloads = attribution_phase1.get("workloads", {})
     workload_data = workloads.get(workload_level, {})
-    services = workload_data.get("models", {}).get("M2", {}).get("services", {})
+    services = workload_data.get("models", {}).get(model, {}).get("services", {})
     ranked = sorted(
         services.items(),
         key=lambda kv: kv[1].get("mean") or 0,
@@ -254,6 +255,14 @@ def top5_m2_services(attribution_phase1: dict, workload_level: str) -> list[dict
         }
         for name, stats in ranked[:5]
     ]
+
+
+def top5_m2_services(attribution_phase1: dict, workload_level: str) -> list[dict]:
+    return top5_model_services(attribution_phase1, workload_level, "M2")
+
+
+def top5_m1_services(attribution_phase1: dict, workload_level: str) -> list[dict]:
+    return top5_model_services(attribution_phase1, workload_level, "M1")
 
 
 # ---------------------------------------------------------------------------
@@ -446,6 +455,7 @@ def main():
 
     aggregate_rows = []
     service_rows = []
+    service_rows_m1 = []
     iteration_rows = []
 
     for html_path in html_files:
@@ -471,7 +481,7 @@ def main():
             runs_with_flags = quality_counts.get("runs_with_flags")
             total_runs = quality_counts.get("total_runs")
 
-            agg_count = svc_count = 0
+            agg_count = svc_count = svc_count_m1 = 0
 
             for level_agg in level_aggregates:
                 level = level_agg.get("workload_level", "unknown")
@@ -500,7 +510,18 @@ def main():
                     })
                     svc_count += 1
 
-            print(f"  OK — {agg_count} level aggregate row(s), {svc_count} M2 service row(s)")
+                for svc in top5_m1_services(attribution_phase1, level):
+                    service_rows_m1.append({
+                        "source_folder": source_folder,
+                        "app_name": app_name,
+                        "machine": machine,
+                        "experiment_name": experiment_name,
+                        "workload_level": level,
+                        **svc,
+                    })
+                    svc_count_m1 += 1
+
+            print(f"  OK — {agg_count} level aggregate row(s), {svc_count} M2 service row(s), {svc_count_m1} M1 service row(s)")
 
             # Per-iteration extraction (workstation only — EC2 lacks cpu_total.json)
             if machine == 'workstation':
@@ -536,6 +557,7 @@ def main():
     out = args.output_dir
     write_csv(out / "results_aggregates.csv",      AGGREGATE_CSV_FIELDS,    aggregate_rows)
     write_csv(out / "results_m2_top_services.csv", SERVICE_CSV_FIELDS,      service_rows)
+    write_csv(out / "results_m1_top_services.csv", SERVICE_CSV_FIELDS,      service_rows_m1)
     write_csv(out / "diagnostics_cv.csv",          CV_CSV_FIELDS,           compute_cv_diagnostics(aggregate_rows, service_rows))
     write_csv(out / "diagnostics_epr_trend.csv",   EPR_TREND_CSV_FIELDS,    compute_epr_trend(aggregate_rows))
     write_csv(out / "diagnostics_cross_release.csv", CROSS_RELEASE_CSV_FIELDS, compute_cross_release_delta(aggregate_rows, service_rows))
