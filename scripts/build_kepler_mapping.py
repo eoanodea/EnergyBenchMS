@@ -2,7 +2,7 @@
 """Build Kepler -> pod/container mapping from saved Prometheus query outputs.
 
 Usage: python scripts/build_kepler_mapping.py \
-    --run-dir final-runs/experiment-runs/oteldemo/eoan_20260520_132436_360089_otel-demo/medium/iteration_20260520_141436_309416
+    --run-dir final-runs/experiment-runs/oteldemo/workstation_20260520_132436_360089_otel-demo/medium/iteration_20260520_141436_309416
 
 This script reads:
 - energyAnalyserPrometheusQueries/kepler_series_labels.json

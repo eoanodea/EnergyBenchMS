@@ -18,7 +18,7 @@ SAMPLE_RUN_DIR = (
     / "final-runs"
     / "experiment-runs"
     / "onlineboutique"
-    / "eoan_20260505_193937_401383_onlineboutique"
+    / "workstation_20260505_193937_401383_onlineboutique"
     / "medium"
     / "iteration_20260505_202750_581542"
 )

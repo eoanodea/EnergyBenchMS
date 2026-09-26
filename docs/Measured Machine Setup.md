@@ -39,15 +39,15 @@ bcdedit /deletevalue {current} safeboot
 
 # 4. Ubuntu
 
-servername: framelab
+servername: your_server_name
 
-username: eoan
+username: your_username
 
-password: eoan
+password: your_password
 
 ```markdown
 sudo apt update
-sudo apt upgrade -y 
+sudo apt upgrade -y
 ```
 
 Time sync
@@ -92,12 +92,14 @@ Docker Config
 
 ```markdown
 # Add Docker's official GPG key:
+
 sudo apt install ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
 sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
 
 # Add the repository to Apt sources:
+
 sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
 Types: deb
 URIs: https://download.docker.com/linux/ubuntu
@@ -116,6 +118,7 @@ Docker install
 sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 # Verify installation
+
 sudo systemctl status docker
 ```
 
@@ -150,40 +153,41 @@ scrape_configs:
 
 ```markdown
 # Create network, run node-exporter & prometheus
+
 docker network create monitoring
 
 docker run -d \
-  --name=node-exporter \
-  --network=monitoring \
-  -p 9100:9100 \
-  prom/node-exporter
-  
-  docker run -d \
-  --name=prometheus \
-  --network=monitoring \
-  -p 9090:9090 \
-  -v ~/observability/prometheus.yml:/etc/prometheus/prometheus.yml \
-  prom/prometheus
-  
-  VERSION=0.55.1 # use the latest release version from https://github.com/google/cadvisor/releases
+ --name=node-exporter \
+ --network=monitoring \
+ -p 9100:9100 \
+ prom/node-exporter
+
+docker run -d \
+ --name=prometheus \
+ --network=monitoring \
+ -p 9090:9090 \
+ -v ~/observability/prometheus.yml:/etc/prometheus/prometheus.yml \
+ prom/prometheus
+
+VERSION=0.55.1 # use the latest release version from https://github.com/google/cadvisor/releases
 sudo docker run -d \
-  --volume=/:/rootfs:ro \
-  --volume=/var/run:/var/run:ro \
-  --volume=/sys:/sys:ro \
-  --volume=/var/lib/docker/:/var/lib/docker:ro \
-  --volume=/dev/disk/:/dev/disk:ro \
-  --publish=8081:8080 \
-  --detach=true \
-  --name=cadvisor \
-  --network=monitoring \
-  --privileged \
-  --device=/dev/kmsg \
-  ghcr.io/google/cadvisor:$VERSION # for versions prior to v0.53.0, use gcr.io/cadvisor/cadvisor instead
+ --volume=/:/rootfs:ro \
+ --volume=/var/run:/var/run:ro \
+ --volume=/sys:/sys:ro \
+ --volume=/var/lib/docker/:/var/lib/docker:ro \
+ --volume=/dev/disk/:/dev/disk:ro \
+ --publish=8081:8080 \
+ --detach=true \
+ --name=cadvisor \
+ --network=monitoring \
+ --privileged \
+ --device=/dev/kmsg \
+ ghcr.io/google/cadvisor:$VERSION # for versions prior to v0.53.0, use gcr.io/cadvisor/cadvisor instead
 ```
 
 # Static IP Setup (workstation)
 
-Edit the file `/etc/netplan/00-installer-config.yaml` (or whatever file is inside of `/etc/netplan`  and change to the following content
+Edit the file `/etc/netplan/00-installer-config.yaml` (or whatever file is inside of `/etc/netplan` and change to the following content
 
 ```yaml
 network:
@@ -349,7 +353,7 @@ kubectl get svc -n kepler # in my case was 28282/TCP
 kubectl port-forward -n kepler svc/kepler 28282:28282
 ```
 
-In another terminal, run 
+In another terminal, run
 
 ```bash
 curl http://localhost:28282/metrics | head
@@ -376,7 +380,7 @@ Next, we need to expose Kepler via NodePort
 kubectl patch svc kepler -n kepler -p '{"spec": {"type": "NodePort"}}'
 ```
 
-Now run 
+Now run
 
 ```yaml
 kubectl get svc -n kepler # look for the second port e.g. 3xxxx
@@ -461,7 +465,7 @@ kubectl apply -f deployment.yaml
 kubectl apply -f service.yaml
 ```
 
-And run 
+And run
 
 ```yaml
 kubectl get pods # Pod running
@@ -496,7 +500,7 @@ class SimpleWebUser(HttpUser):
         self.client.get("/")
 ```
 
-Now run locust 
+Now run locust
 
 ```yaml
 locust -H http://WORKSTATION_IP:30007 # The IP of the simple-web app running in kubernetes
@@ -508,7 +512,7 @@ Query in prometheus and see the energy consumption by containers
 
 ```yaml
 sum by (container_name) (
-  rate(kepler_container_cpu_joules_total[1m])
+rate(kepler_container_cpu_joules_total[1m])
 )
 ```
 
@@ -528,7 +532,7 @@ curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key \
 
 echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' \
   | sudo tee /etc/apt/sources.list.d/kubernetes.list
-  
+
 sudo apt update
 sudo apt install -y kubectl
 
@@ -551,5 +555,3 @@ vim ~/.kube/config # paste the contents here
 ```
 
 Make sure to edit the `server` IP to match the IP of the measured machine
-
-Now try to run the (simple) automated experiment runner on the control machine located at this repo `https://github.com/eoanodea/EnergyBenchMS`

@@ -142,9 +142,9 @@ M1_M2_ENERGY_CSV_FIELDS = [
 # ---------------------------------------------------------------------------
 
 def infer_machine(run_dir_name: str) -> str:
-    if run_dir_name.startswith("eoan_"):
+    if run_dir_name.startswith("workstation_"):
         return "workstation"
-    if run_dir_name.startswith("julian_"):
+    if run_dir_name.startswith("ec2_"):
         return "ec2"
     return "unknown"
 
