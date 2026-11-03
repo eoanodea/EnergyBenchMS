@@ -509,11 +509,23 @@ def build_physical_power_meter_summary(run_dir, metadata, workload_summary):
     baseline_power_watts = safe_mean([sample.get("apower") for sample in baseline_samples])
     baseline_drift_ratio = compute_baseline_drift_ratio(baseline_samples)
 
+    # Metadata timestamps are on the Prometheus clock (time_source.offset_seconds) in naive local time, while meter
+    # samples carry the controller's unix time, so the metadata window can miss the samples entirely. Integrate over
+    # the phase-tagged workload samples in the meter's own clock, keeping any configured ramp exclusion.
+    integration_start, integration_end = workload_effective_start, workload_end
+    tagged_timestamps = [s["timestamp"] for s in workload_samples if isinstance(s.get("timestamp"), (int, float))]
+    if tagged_timestamps:
+        ramp_seconds = 0.0
+        if workload_start is not None and workload_effective_start is not None:
+            ramp_seconds = max(0.0, workload_effective_start - workload_start)
+        integration_start = min(tagged_timestamps) + ramp_seconds
+        integration_end = max(tagged_timestamps)
+
     baseline_corrected_workload_energy_joules = integrate_net_energy_joules(
         workload_samples,
         baseline_power_watts,
-        start_timestamp=workload_effective_start,
-        end_timestamp=workload_end,
+        start_timestamp=integration_start,
+        end_timestamp=integration_end,
     )
 
     effective_duration = parse_effective_duration_seconds(metadata)

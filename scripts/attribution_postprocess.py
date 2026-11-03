@@ -35,7 +35,7 @@ UNKNOWN_GROUP = "unknown"
 SUT_SCOPE = "sut"
 
 DEFAULT_IGNORE_PATTERNS = [
-    r"(^|/)loadgenerator($|[-/])",
+    r"(^|/)load-?generator($|[-/])",
     r"(^|/)prometheus($|[-/])",
     r"(^|/)grafana($|[-/])",
     r"(^|/)jaeger($|[-/])",
@@ -186,8 +186,9 @@ def deployment_name_from_owner_references(owner_refs: Any) -> Optional[str]:
         if kind == "deployment":
             return name
         if kind == "replicaset":
-            # Typical ReplicaSet naming: <deployment>-<hash>
-            return re.sub(r"-[a-f0-9]{8,10}$", "", name)
+            # ReplicaSet naming is always <deployment>-<pod-template-hash>; the hash uses the k8s safe
+            # alphabet (not hex) and can be shorter than 8 chars, so strip the last segment.
+            return name.rsplit("-", 1)[0] if "-" in name else name
     return None
 
 
@@ -1007,11 +1008,18 @@ def build_container_rows(
         deployment_name = normalize_entity_name(row.get("deployment_name"))
         pod_name = normalize_entity_name(row.get("pod_name"))
         has_k8s_identity = bool(pod_namespace or deployment_name or pod_name)
-        if (
+        if classification.get("ignored"):
+            # Explicit ignore patterns (load generators, tracing/monitoring) take precedence over the
+            # namespace-scope fallback; otherwise anything deployed in the app namespace was forced in scope.
+            pass
+        elif (
             (pod_namespace and pod_namespace in catalog.get("deployment_namespaces", set()))
             or (deployment_name and deployment_name in catalog.get("deployment_names", set()))
         ):
-            fallback_service_name = deployment_name or next(iter(catalog.get("deployment_names", set())), None) or normalize_entity_name(row.get("entity_name"))
+            # Pods without a Deployment owner (StatefulSet "opensearch-0", DaemonSet "otel-collector-agent-d78pm")
+            # previously fell back to an arbitrary deployment name from the catalog; derive the name from the pod.
+            pod_base_name = re.sub(r"-(\d+|[bcdfghjklmnpqrstvwxz2456789]{5})$", "", pod_name) if pod_name else None
+            fallback_service_name = deployment_name or pod_base_name or normalize_entity_name(row.get("entity_name"))
             classification = {
                 **classification,
                 "service_name": fallback_service_name,

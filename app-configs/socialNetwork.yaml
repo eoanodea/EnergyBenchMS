@@ -14,6 +14,6 @@ resource_overrides:
             nodePort: 32554
 
 exclude_resource_patterns:
-  - "(^|/)loadgenerator($|[-/])"
+  - "(^|/)load-?generator($|[-/])"
   - "(^|/)grafana($|[-/])"
   - "(^|/)prometheus($|[-/])"
