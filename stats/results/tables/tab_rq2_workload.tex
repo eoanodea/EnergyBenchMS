@@ -1,0 +1,26 @@
+\begin{table*}[t]
+\centering
+\caption{RQ2: effect of workload level (low/medium/high) per release. Kruskal--Wallis $H$ (df = 2) with Benjamini--Hochberg adjusted $p$ across the workload family, and Cliff's $\delta$ (high vs.\ low) with 95\% bootstrap CI; $\delta < 0$: lower at high load. $^\dagger$complete separation ($|\delta| = 1$; every high-load run below/above every low-load run), for which the bootstrap CI is degenerate. $n = 5$ runs per level.}
+\label{tab:rq2-workload}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{ll ccc ccc ccc}
+\toprule
+ & & \multicolumn{3}{c}{EPR (M2)} & \multicolumn{3}{c}{Energy (M2)} & \multicolumn{3}{c}{Energy (meter)} \\
+\cmidrule(lr){3-5}\cmidrule(lr){6-8}\cmidrule(lr){9-11}
+App & Release & $H$ & $p_{BH}$ & $\delta$ & $H$ & $p_{BH}$ & $\delta$ & $H$ & $p_{BH}$ & $\delta$ \\
+\midrule
+OTel Demo & v1.12.0 & 12.5 & 0.003 & -1.00$^\dagger$ & 12.5 & 0.003 & +1.00$^\dagger$ & 12.5 & 0.003 & +1.00$^\dagger$ \\
+ & v2.0.0 & 12.5 & 0.003 & -1.00$^\dagger$ & 12.5 & 0.003 & +1.00$^\dagger$ & 12.5 & 0.003 & +1.00$^\dagger$ \\
+ & v2.2.0 & 12.5 & 0.003 & -1.00$^\dagger$ & 12.5 & 0.003 & +1.00$^\dagger$ & 12.5 & 0.003 & +1.00$^\dagger$ \\
+\midrule
+Social Network & v0.1.0 & 12.5 & 0.003 & -1.00$^\dagger$ & 3.9 & 0.158 & +0.60 [-0.20, +1.00] & 12.5 & 0.003 & +1.00$^\dagger$ \\
+ & v0.2.0 & 12.5 & 0.003 & -1.00$^\dagger$ & 8.3 & 0.021 & +1.00$^\dagger$ & 12.0 & 0.004 & +1.00$^\dagger$ \\
+ & v0.4.1 & 12.5 & 0.003 & -1.00$^\dagger$ & 4.7 & 0.110 & +0.76 [+0.20, +1.00] & 12.5 & 0.003 & +1.00$^\dagger$ \\
+\midrule
+Train Ticket & v0.0.4 & 10.0 & 0.011 & -1.00$^\dagger$ & 9.9 & 0.011 & -0.92 [-1.00, -0.68] & 9.6 & 0.012 & -0.92 [-1.00, -0.68] \\
+ & v0.2.0 & 12.5 & 0.003 & -1.00$^\dagger$ & 2.5 & 0.313 & +0.52 [-0.20, +1.00] & 1.5 & 0.482 & -0.60 [-1.00, +0.20] \\
+ & v1.0.0 & 7.6 & 0.027 & -1.00$^\dagger$ & 7.6 & 0.027 & +0.92 [+0.52, +1.00] & 2.2 & 0.349 & +0.44 [-0.36, +1.00] \\
+\bottomrule
+\end{tabular}
+\end{table*}

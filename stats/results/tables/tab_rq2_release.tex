@@ -1,0 +1,24 @@
+\begin{table*}[t]
+\centering
+\caption{RQ2: effect of software release. Cliff's $\delta$ (newer vs.\ older release) at low / medium / high workload; $\delta > 0$: higher in the newer release. Bold: large effect ($|\delta| \geq 0.43$) in a cell whose Kruskal--Wallis test across the three releases is significant after Benjamini--Hochberg correction ($p_{BH} < .05$). $n = 5$ runs per release and level. Dominant service: Train Ticket 	exttt{ts-travel2-service}, Social Network 	exttt{nginx-thrift}, OTel Demo 	exttt{frontend}.}
+\label{tab:rq2-release}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llcccc}
+\toprule
+App & Releases & EPR (M2) & Energy (M2) & Energy (meter) & Dominant-service share \\
+\midrule
+OTel Demo & v1.12.0$\rightarrow$v2.0.0 & -0.20 / +0.36 / -0.20 & -0.36 / +0.36 / -0.20 & -0.12 / +0.04 / +0.12 & -0.20 / -0.52 / -0.52 \\
+ & v1.12.0$\rightarrow$v2.2.0 & -0.28 / +0.36 / -0.36 & -0.36 / +0.44 / -0.44 & +0.28 / +0.04 / -0.12 & -0.12 / -0.60 / +0.28 \\
+ & v2.0.0$\rightarrow$v2.2.0 & +0.36 / +0.20 / -0.36 & +0.36 / +0.20 / -0.36 & +0.36 / +0.04 / -0.12 & +0.12 / -0.04 / +0.60 \\
+\midrule
+Social Network & v0.1.0$\rightarrow$v0.2.0 & +0.12 / -0.04 / +0.20 & +0.28 / -0.12 / +0.04 & -0.36 / +0.04 / +0.20 & +0.20 / +0.28 / -0.28 \\
+ & v0.1.0$\rightarrow$v0.4.1 & \textbf{+1.00} / \textbf{+0.92} / \textbf{+1.00} & \textbf{+1.00} / \textbf{+0.92} / \textbf{+1.00} & +0.04 / -0.52 / +0.60 & +0.36 / +0.04 / -0.04 \\
+ & v0.2.0$\rightarrow$v0.4.1 & \textbf{+1.00} / \textbf{+1.00} / \textbf{+1.00} & \textbf{+1.00} / \textbf{+1.00} / \textbf{+1.00} & +0.68 / -0.20 / +0.44 & +0.28 / -0.44 / +0.52 \\
+\midrule
+Train Ticket & v0.0.4$\rightarrow$v0.2.0 & \textbf{+1.00} / +0.76 / +0.68 & \textbf{+1.00} / \textbf{+1.00} / \textbf{+1.00} & \textbf{+1.00} / +1.00 / +0.76 & \textbf{-1.00} / \textbf{+0.84} / \textbf{+1.00} \\
+ & v0.0.4$\rightarrow$v1.0.0 & \textbf{+1.00} / -0.36 / +0.84 & \textbf{+1.00} / \textbf{+1.00} / \textbf{+1.00} & -0.04 / +0.76 / +0.60 & \textbf{+1.00} / \textbf{+1.00} / \textbf{+1.00} \\
+ & v0.2.0$\rightarrow$v1.0.0 & \textbf{-1.00} / -0.84 / +0.36 & -0.04 / \textbf{+0.60} / +0.28 & \textbf{-1.00} / -0.04 / +0.04 & \textbf{+1.00} / \textbf{+0.92} / -0.12 \\
+\bottomrule
+\end{tabular}
+\end{table*}
