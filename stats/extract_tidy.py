@@ -18,17 +18,18 @@ for summ in sorted(glob.glob(os.path.join(ROOT, "*", "*", "*", "iteration_*", "s
                meter_net_j=pm.get("baseline_corrected_workload_energy_joules"), meter_flags="|".join(pm.get("quality_flags") or []),
                meter_drift=pm.get("baseline_drift_ratio"))
     sa = os.path.join(it, "attribution", "service_attribution.csv")
-    m1_tot = m2_tot = 0.0; dur = req = None; n_m1 = 0
+    m1_tot = m2_tot = 0.0; dur = req = ok = None; n_m1 = 0
     if os.path.exists(sa):
         for r in csv.DictReader(open(sa)):
             dur = r.get("duration_seconds") or dur; req = r.get("total_requests") or req
+            ok = r.get("successful_requests") or ok
             e = float(r["allocated_energy_joules"] or 0)
             if r["model_variant"] == "M1": m1_tot += e; n_m1 += 1
             elif r["model_variant"] == "M2": m2_tot += e
             svc.append(dict(release_folder=rel_folder, env=env, level=level, iteration=iteration, model=r["model_variant"],
                             service=r["service_name"], group=r.get("service_group"), energy_j=e,
                             share=r.get("share_of_reference_energy")))
-    row.update(duration_s=dur, total_requests=req, m1_total_j=m1_tot, m1_services=n_m1, m2_total_j=m2_tot)
+    row.update(duration_s=dur, total_requests=req, successful_requests=ok, m1_total_j=m1_tot, m1_services=n_m1, m2_total_j=m2_tot)
     runs.append(row)
 os.makedirs(OUT, exist_ok=True)
 for name, rows in (("tidy_runs.csv", runs), ("tidy_services.csv", svc)):

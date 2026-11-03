@@ -7,7 +7,7 @@ Two families, each corrected with BH separately (across all cells and responses 
 Responses
   epr_m2_j        M2-attributed energy per request (J/request)
   m2_total_j      M2-attributed system energy (J)
-  net_j           wall-meter net workload energy (J); Online Boutique included but low-signal (~0.1 W)
+  net_j           wall-meter net workload energy (J)
   dominant_share  per-run M2 share of the app's dominant service (release family only)
 
 Cliff's delta: delta(b vs a) = P(b > a) - P(b < a), with b = higher level / newer release.
@@ -27,7 +27,7 @@ from scipy import stats
 
 from common import LEVELS, bh, load_runs, load_services, save
 
-LOW_SIGNAL_APPS = {"onlineboutique"}  # informational flag only (net workload power ~0.1 W); not excluded
+LOW_SIGNAL_APPS: set = set()  # Online Boutique now removed by the run-validity rule in common.valid_runs()
 RESPONSES = {"epr_m2_j": "EPR (M2)", "m2_total_j": "Energy (M2)", "net_j": "Energy (meter)",
              "dominant_share": "Dominant-service share"}
 # Kitchenham et al. 2017, Table 5 (Vargha & Delaney / Kraemer & Kupfer)

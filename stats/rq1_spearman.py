@@ -16,7 +16,7 @@ from scipy import stats
 from common import bh, load_runs, load_services, save
 
 PREDICTORS = {"m2_total_j": "M2 total", "m1_total_j": "M1 total", "cpu_total_mean": "CPU total"}
-LOW_SIGNAL_APPS = {"onlineboutique"}  # informational flag only (net workload power ~0.1 W); not excluded
+LOW_SIGNAL_APPS: set = set()  # Online Boutique now removed by the run-validity rule in common.valid_runs()
 
 
 def spearman_ci(x, y, boot, rng):

@@ -2,7 +2,8 @@
 
 Inputs are the tidy tables produced by extract_tidy.py and extract_meter.py.
 Analysis set = workstation runs of the 12 release folders used in the paper (EC2 dropped).
-No data are filtered here: data-quality fixes belong in the pipeline (summarise_run.py, attribution_postprocess.py).
+Data-quality fixes belong in the pipeline (summarise_run.py, attribution_postprocess.py). The only filter here is the
+run-validity rule: a run is invalid if the SUT served no successful requests (see valid_runs()).
 """
 from pathlib import Path
 
@@ -42,16 +43,31 @@ def _tag(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def valid_runs(verbose: bool = True) -> pd.DataFrame:
+    """Run-validity rule: a run is invalid if the SUT served no successful requests (the workload never reached it).
+
+    On the workstation this removes every Online Boutique run: all requests were refused or timed out at the
+    cluster entry point, and service CPU was flat across workload levels.
+    """
+    runs = pd.read_csv(HERE / "tidy_runs.csv")
+    runs = runs[(runs["env"] == "workstation") & runs["release_folder"].isin(ANALYSIS_SET)]
+    invalid = runs["successful_requests"].fillna(0) <= 0
+    if verbose and invalid.any():
+        print("Run-validity rule: excluded", int(invalid.sum()), "of", len(runs), "runs with no successful requests:",
+              runs.loc[invalid].groupby("release_folder").size().to_dict())
+    return runs[~invalid]
+
+
 def load_services() -> pd.DataFrame:
-    """One row per workstation run x model x service, exactly as produced by the attribution pipeline."""
+    """One row per valid workstation run x model x service, exactly as produced by the attribution pipeline."""
     svc = pd.read_csv(HERE / "tidy_services.csv")
+    svc = svc.merge(valid_runs(verbose=False)[KEYS], on=KEYS, how="inner")
     return _tag(svc[svc["env"] == "workstation"]).reset_index(drop=True)
 
 
 def load_runs() -> pd.DataFrame:
-    """One row per workstation run: workload, CPU, M1/M2 totals and wall-meter net energy, as produced by the pipeline."""
-    runs = pd.read_csv(HERE / "tidy_runs.csv")
-    runs = runs[runs["env"] == "workstation"].rename(columns={"meter_net_j": "net_j"})
+    """One row per valid workstation run: workload, CPU, M1/M2 totals and wall-meter net energy, as produced by the pipeline."""
+    runs = valid_runs().rename(columns={"meter_net_j": "net_j"})
     runs = _tag(runs)
     runs["epr_m2_j"] = runs["m2_total_j"] / runs["total_requests"]
     return runs.reset_index(drop=True)
