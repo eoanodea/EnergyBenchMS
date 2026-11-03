@@ -244,7 +244,7 @@ git submodule update --init --recursive
 
 ## Archived Run Bundle
 
-The archive [final-runs.zip](final-runs.zip) contains the full curated experimental dataset used for analysis.
+The archive [final-runs.tar.xz](final-runs.tar.xz) contains the full curated experimental dataset used for analysis.
 
 It includes:
 
