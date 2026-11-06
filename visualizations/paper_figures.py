@@ -5,6 +5,7 @@ Figures -> visualizations/figures/paper/, tables -> stats/results/tables/.
   fig_epr_workload.pdf        EPR per run across workload levels, per app (replaces Fig. 3)
   fig_service_composition.pdf median M2 share of top-3 services per release, medium load (replaces Fig. 5)
   fig_m1_coverage.pdf         M1 / M2 attributed energy per run, per app (replaces Fig. 4)
+  fig_motivation.pdf          Section III example: system-level vs. one service across releases (replaces Fig. 1)
   tab_rq1.tex, tab_rq2_workload.tex, tab_rq2_release.tex
 """
 import sys
@@ -43,26 +44,35 @@ def releases(runs, app):
 
 # ---------------------------------------------------------------- figures
 def fig_epr(runs):
-    fig, axes = plt.subplots(len(APPS), 1, figsize=(3.4, 4.8), sharex=True)
+    """Median EPR per release x level with min-max range (n = 5 runs), rotated; x-axis fitted per app."""
+    fig, axes = plt.subplots(len(APPS), 1, figsize=(3.4, 4.3))
     for ax, (app, label) in zip(axes, APPS.items()):
         g = runs[runs.app == app]
+        lo, hi = np.inf, -np.inf
         for i, rel in enumerate(releases(runs, app)):
             for j, lvl in enumerate(LEVELS):
                 y = g[(g.release == rel) & (g.level == lvl)]["epr_m2_j"].dropna().to_numpy() * 1e3
-                x = j + (i - 1) * 0.22
-                ax.scatter(np.full(len(y), x) + np.linspace(-0.04, 0.04, len(y)), y, s=9, marker=REL_MARKERS[i],
-                           color=REL_COLORS[i], edgecolor="white", linewidth=0.4, zorder=3,
-                           label=rel if j == 0 else None)
-                if len(y):
-                    ax.hlines(np.median(y), x - 0.09, x + 0.09, color=INK, linewidth=1.0, zorder=4)
+                if not len(y):
+                    continue
+                pos = j + (i - 1) * 0.27
+                med = np.median(y)
+                lo, hi = min(lo, y.min()), max(hi, y.max())
+                ax.errorbar(med, pos, xerr=[[med - y.min()], [y.max() - med]], fmt=REL_MARKERS[i], ms=5,
+                            color=REL_COLORS[i], mec="white", mew=0.5, elinewidth=1.3, capsize=2.5, capthick=1.3,
+                            zorder=3, label=rel if j == 0 else None)
+        pad = 0.06 * (hi - lo)
+        ax.set_xlim(lo - pad, hi + pad)
+        ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(6, steps=[1, 2, 2.5, 5, 10]))
+        ax.set_yticks(range(len(LEVELS)), [l.capitalize() for l in LEVELS])
+        ax.set_ylim(len(LEVELS) - 0.5, -0.5)
+        for j in (0.5, 1.5):
+            ax.axhline(j, color="#d9d8d2", lw=0.6)
+        ax.grid(axis="y", visible=False)
         ax.set_title(label, loc="left", color=INK)
-        ax.set_ylabel("EPR (mJ/request)")
         ax.legend(frameon=False, loc="lower right", bbox_to_anchor=(1.0, 0.98), ncol=3, handletextpad=0.2,
                   columnspacing=0.8, borderaxespad=0)
-        ax.grid(axis="x", visible=False)
-    axes[-1].set_xticks(range(len(LEVELS)), [l.capitalize() for l in LEVELS])
-    axes[-1].set_xlabel("Workload level")
-    fig.align_ylabels(axes)
+    axes[-1].set_xlabel("EPR (mJ/request)")
+    fig.tight_layout(h_pad=1.0)
     fig.savefig(FIG_OUT / "fig_epr_workload.pdf")
     plt.close(fig)
 
@@ -116,6 +126,40 @@ def fig_coverage(runs):
     plt.close(fig)
 
 
+def fig_motivation(runs, svc, app="trainticket", service="ts-travel2-service", level="medium"):
+    """Section III example: per release, a horizontal bar for the total system energy (M2 total) with the part
+    attributed to one service highlighted; (a) energy, (b) energy per request, stacked vertically for a single column.
+    Medians of the five runs per release (dispersion is reported in Sec. VII)."""
+    rels = releases(runs, app)
+    rr = runs[(runs.app == app) & (runs.level == level)]
+    ss = svc[(svc.app == app) & (svc.model == "M2") & (svc.level == level) & (svc.service == service)]
+    ss = ss.merge(rr[["iteration", "total_requests"]], on="iteration")
+    ss = ss.assign(epr=ss.energy_j / ss.total_requests * 1e3)
+    med = lambda df, col, k=1.0: np.array([df[df.release == x][col].median() * k for x in rels])
+    panels = [("(a) Energy", "Energy (J)", med(rr, "m2_total_j"), med(ss, "energy_j")),
+              ("(b) Energy per request", "Energy per request (mJ/request)", med(rr, "epr_m2_j", 1e3), med(ss, "epr"))]
+    fig, axes = plt.subplots(2, 1, figsize=(3.4, 2.7))
+    y = np.arange(len(rels))
+    for ax, (title, xlab, tot, part) in zip(axes, panels):
+        ax.barh(y, part, height=0.62, color=REL_COLORS[0], edgecolor="white", linewidth=1.0, label=service)
+        ax.barh(y, tot - part, left=part, height=0.62, color=OTHER, edgecolor="white", linewidth=1.0,
+                label="rest of system")
+        for i in range(len(rels)):
+            ax.text(tot[i] + tot.max() * 0.015, y[i], f"{tot[i]:.0f}", ha="left", va="center", fontsize=6, color=INK)
+            ax.text(part[i] / 2, y[i], f"{part[i]:.0f}", ha="center", va="center", fontsize=6, color="white")
+        ax.set_yticks(y, rels)
+        ax.tick_params(axis="y", length=0)
+        ax.set_xlim(0, tot.max() * 1.1)
+        ax.set_xlabel(xlab)
+        ax.set_title(title, loc="left", color=INK)
+        ax.grid(axis="y", visible=False)
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(h, l, frameon=False, loc="upper center", ncol=2, handlelength=1, bbox_to_anchor=(0.5, 1.01))
+    fig.tight_layout(h_pad=0.9, rect=(0, 0, 1, 0.94))
+    fig.savefig(FIG_OUT / "fig_motivation.pdf")
+    plt.close(fig)
+
+
 # ---------------------------------------------------------------- tables
 def ci(v, lo, hi, d=2):
     return f"{v:.{d}f} [{lo:.{d}f}, {hi:.{d}f}]"
@@ -138,14 +182,14 @@ def tab_rq1():
     body = "\n".join(rows)
     (TAB_OUT / "tab_rq1.tex").write_text(rf"""\begin{{table*}}[t]
 \centering
-\caption{{RQ1: agreement between measured and attributed energy (workstation). Spearman's $\rho$ with 95\% bootstrap CI over the 45 runs of each application (3 releases $\times$ 3 workload levels $\times$ 5 repetitions); all $p_{{BH}} < .05$. Service level: median per-run $\rho$ between M1 and M2 service energies, and share of runs in which both models identify the same top service.}}
+\caption{{RQ1: Spearman's $\rho$ [95\% CI] between measured and attributed energy, and M1--M2 service-level agreement.}}
 \label{{tab:rq1}}
 \small
 \begin{{tabular}}{{lccccc}}
 \toprule
  & \multicolumn{{3}}{{c}}{{Wall-meter net energy vs.}} & \multicolumn{{2}}{{c}}{{M1 vs.\ M2 (service level)}} \\
 \cmidrule(lr){{2-4}}\cmidrule(lr){{5-6}}
-Application & M1 total & M2 total & CPU total & median $\rho$ & same top service \\
+Application & M1 total & M2 total & CPU (reference) & median $\rho$ & same top service \\
 \midrule
 {body}
 \bottomrule
@@ -175,7 +219,7 @@ def tab_rq2_workload():
     cm = "".join(f"\\cmidrule(lr){{{3+3*i}-{5+3*i}}}" for i in range(3))
     (TAB_OUT / "tab_rq2_workload.tex").write_text(rf"""\begin{{table*}}[t]
 \centering
-\caption{{RQ2: effect of workload level (low/medium/high) per release. Kruskal--Wallis $H$ (df = 2) with Benjamini--Hochberg adjusted $p$ across the workload family, and Cliff's $\delta$ (high vs.\ low) with 95\% bootstrap CI; $\delta < 0$: lower at high load. $^\dagger$complete separation ($|\delta| = 1$; every high-load run below/above every low-load run), for which the bootstrap CI is degenerate. $n = 5$ runs per level.}}
+\caption{{RQ2: effect of workload level per release (Kruskal--Wallis and Cliff's $\delta$, high vs.\ low).}}
 \label{{tab:rq2-workload}}
 \small
 \setlength{{\tabcolsep}}{{4pt}}
@@ -193,38 +237,44 @@ App & Release & $H$ & $p_{{BH}}$ & $\delta$ & $H$ & $p_{{BH}}$ & $\delta$ & $H$ 
 
 
 def tab_rq2_release():
-    kw = pd.read_csv(RESULTS / "rq2_kruskal.csv")
+    """Cliff's delta per release pair, one sub-column per workload level (L/M/H) so that individual cells can be
+    shaded. Shaded + bold: large effect (|delta| >= 0.43) in a cell whose Kruskal-Wallis test is significant (BH)."""
     cd = pd.read_csv(RESULTS / "rq2_cliff.csv")
-    kw, cd = kw[kw.family == "release"], cd[cd.family == "release"]
+    cd = cd[cd.family == "release"]
     resp = ["EPR (M2)", "Energy (M2)", "Energy (meter)", "Dominant-service share"]
+    short = {"EPR (M2)": "EPR (M2)", "Energy (M2)": "Energy (M2)", "Energy (meter)": "Energy (meter)",
+             "Dominant-service share": "Dominant share"}
     rows = []
     for app, label in APPS.items():
         pairs = cd[cd.app == app][["a", "b"]].drop_duplicates().itertuples(index=False)
         for k, (a, b) in enumerate(pairs):
             cells = []
             for r in resp:
-                vals = []
                 for lvl in LEVELS:
                     c = cd[(cd.app == app) & (cd.a == a) & (cd.b == b) & (cd.response == r) & (cd.context == lvl)]
                     if c.empty:
-                        vals.append("--"); continue
+                        cells.append("--"); continue
                     c = c.iloc[0]
-                    v = f"{c.delta:+.2f}"
-                    vals.append(f"\\textbf{{{v}}}" if c.kw_p_bh < .05 and abs(c.delta) >= 0.428 else v)
-                cells.append(" / ".join(vals))
+                    v = f"{c.delta:+.2f}".replace("-", "$-$")  # typographic minus
+                    cells.append(f"\\cellcolor{{SigShade}}\\textbf{{{v}}}" if c.kw_p_bh < .05 and abs(c.delta) >= 0.428 else v)
             rows.append(f"{label if k == 0 else ''} & {a}$\\rightarrow${b} & " + " & ".join(cells) + " \\\\")
-        sig = kw[kw.app == app]
         rows.append("\\midrule")
     body = "\n".join(rows[:-1])
+    groups = " & ".join(f"\\multicolumn{{3}}{{c}}{{{short[r]}}}" for r in resp)
+    cmids = "".join(f"\\cmidrule(lr){{{3 + 3 * i}-{5 + 3 * i}}}" for i in range(len(resp)))
+    lmh = " & ".join(["L & M & H"] * len(resp))
     (TAB_OUT / "tab_rq2_release.tex").write_text(rf"""\begin{{table*}}[t]
 \centering
-\caption{{RQ2: effect of software release. Cliff's $\delta$ (newer vs.\ older release) at low / medium / high workload; $\delta > 0$: higher in the newer release. Bold: large effect ($|\delta| \geq 0.43$) in a cell whose Kruskal--Wallis test across the three releases is significant after Benjamini--Hochberg correction ($p_{{BH}} < .05$). $n = 5$ runs per release and level. Dominant service: {", ".join(f"{APPS[a]} \texttt{{{s}}}" for a, s in dominant().items())}.}}
+\caption{{RQ2: Cliff's $\delta$ between releases at low (L), medium (M), and high (H) workload.}}
 \label{{tab:rq2-release}}
+\definecolor{{SigShade}}{{RGB}}{{205,226,251}}
 \small
-\setlength{{\tabcolsep}}{{4pt}}
-\begin{{tabular}}{{llcccc}}
+\setlength{{\tabcolsep}}{{3pt}}
+\begin{{tabular}}{{ll *{{{3 * len(resp)}}}{{r}}}}
 \toprule
-App & Releases & EPR (M2) & Energy (M2) & Energy (meter) & Dominant-service share \\
+ & & {groups} \\
+{cmids}
+App & Releases & {lmh} \\
 \midrule
 {body}
 \bottomrule
@@ -246,7 +296,7 @@ def main():
     m2["share"] = m2.energy_j / m2.groupby(["release_folder", "level", "iteration"]).energy_j.transform("sum")
     _DOM.update(m2.groupby(["app", "service"]).share.mean().reset_index().sort_values("share")
                 .groupby("app").tail(1).set_index("app")["service"].to_dict())
-    fig_epr(runs); fig_composition(runs, svc); fig_coverage(runs)
+    fig_epr(runs); fig_composition(runs, svc); fig_coverage(runs); fig_motivation(runs, svc)
     tab_rq1(); tab_rq2_workload(); tab_rq2_release()
     for d in (FIG_OUT, TAB_OUT):
         print("Written to", d); [print("  ", p.name) for p in sorted(d.iterdir())]
